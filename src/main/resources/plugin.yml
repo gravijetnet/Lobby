@@ -1,0 +1,34 @@
+name: LobbyPlugin
+version: 1.0.0
+main: net.gravijet.lobby.Main
+depend: [PlaceholderAPI]
+softdepend: [PhoenixAPI]
+commands:
+  build:
+    description: Toggle build mode
+    usage: /<command>
+  setspawn:
+    description: Set the lobby spawn
+    usage: /<command>
+  spawn:
+    description: Teleport to spawn
+    usage: /<command>
+  fly:
+    description: Toggle fly mode
+    usage: /<command>
+permissions:
+  lobby.build:
+    description: Access to build mode
+    default: op
+  lobby.setspawn:
+    description: Set spawn location
+    default: op
+  lobby.fly:
+    description: Use fly in lobby
+    default: op
+  lobby.visibility.vip:
+    description: VIP visibility
+    default: false
+  lobby.visibility.staff:
+    description: Staff visibility
+    default: op
