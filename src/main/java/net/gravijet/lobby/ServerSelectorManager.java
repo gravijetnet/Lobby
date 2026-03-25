@@ -31,7 +31,7 @@ public class ServerSelectorManager {
     }
 
     public void openServerSelector(Player player) {
-        // Verwende immer das default-Menü für alle Versionen
+        // Always use the default menu for all versions
         ConfigurationSection menuConfig = config.getConfigurationSection("server-selector.default");
 
         if (menuConfig == null) {
@@ -45,7 +45,7 @@ public class ServerSelectorManager {
 
         Inventory gui = Bukkit.createInventory(null, size, title);
 
-    /*    // Fülle alle Slots mit grauen Glasscheiben
+    /*    // Fill all slots with gray glass panes
         ItemStack glassPane = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta glassMeta = glassPane.getItemMeta();
         glassMeta.setDisplayName(" ");
@@ -55,7 +55,7 @@ public class ServerSelectorManager {
             gui.setItem(i, glassPane);
         } */
 
-        // Setze konfigurierte Items
+        // Set configured items
         ConfigurationSection itemsSection = menuConfig.getConfigurationSection("items");
         if (itemsSection != null) {
             for (String key : itemsSection.getKeys(false)) {
@@ -73,7 +73,6 @@ public class ServerSelectorManager {
         }
 
         player.openInventory(gui);
-        // Sound abspielen
         player.playSound(player.getLocation(), Sound.CHEST_OPEN, 1.0f, 1.0f);
     }
 
@@ -103,7 +102,7 @@ public class ServerSelectorManager {
             }
             meta.setLore(lore);
 
-            // Verstecke alle Attribute und Statistiken (HIDE_DYE existiert nicht in 1.8 → weggelassen)
+            // Hide all attributes and stats (HIDE_DYE does not exist in 1.8 — omitted)
             meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
             meta.addItemFlags(ItemFlag.HIDE_DESTROYS);
             meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);

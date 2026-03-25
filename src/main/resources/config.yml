@@ -10,17 +10,23 @@ spawn:
 # Player visibility settings
 players: {}
 
+# Visibility permission configuration
+# Set the permission node that identifies VIP and Staff players for the visibility filter
+visibility:
+  vip-permission: "lobby.visibility.vip"
+  staff-permission: "lobby.visibility.staff"
+
 # Server Selector Configuration
 server-selector:
   # Default menu for all versions
   default:
-    title: "&aServer Selector"
+    title: "&cServer Selector"
     size: 27
     items:
       ffa:
         slot: 10
         material: IRON_AXE
-        name: "&aFFA"
+        name: "&cFFA"
         lore:
           - "&7Free for All PvP"
           - "&7Click to connect!"
@@ -29,7 +35,7 @@ server-selector:
       skywars:
         slot: 11
         material: GRASS
-        name: "&aSkywars"
+        name: "&cSkywars"
         lore:
           - "&7Fight in the sky"
           - "&7Click to connect!"
@@ -38,7 +44,7 @@ server-selector:
       practice_2:
         slot: 12
         material: GOLDEN_SWORD
-        name: "&aPractice &7(1.9+)"
+        name: "&cPractice &7(1.9+)"
         lore:
           - "&7Practice PvP for 1.9+"
           - "&7Click to connect!"
@@ -47,7 +53,7 @@ server-selector:
       practice_1:
         slot: 13
         material: DIAMOND_SWORD
-        name: "&aPractice &7(1.8)"
+        name: "&cPractice &7(1.8)"
         lore:
           - "&7Practice PvP for 1.8"
           - "&7Click to connect!"
@@ -56,7 +62,7 @@ server-selector:
       letsknock:
         slot: 14
         material: SANDSTONE
-        name: "&aLetsKnock"
+        name: "&cLetsKnock"
         lore:
           - "&7Knock players off platforms"
           - "&7Click to connect!"
@@ -65,7 +71,7 @@ server-selector:
       gens:
         slot: 15
         material: IRON_PICKAXE
-        name: "&aGens"
+        name: "&cGens"
         lore:
           - "&7Resource generation game"
           - "&7Click to connect!"
@@ -74,7 +80,7 @@ server-selector:
       bedwars:
         slot: 16
         material: BED
-        name: "&aBedWars"
+        name: "&cBedWars"
         lore:
           - "&7Protect your bed!"
           - "&7Click to connect!"

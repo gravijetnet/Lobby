@@ -28,7 +28,7 @@ public class BuildCommand implements CommandExecutor {
 
         if (plugin.isInBuildMode(player)) {
             plugin.setBuildMode(player, false);
-            player.sendMessage("§aBuild mode disabled!");
+            player.sendMessage("§cBuild mode disabled!");
         } else {
             plugin.setBuildMode(player, true);
             player.sendMessage("§aBuild mode enabled!");
