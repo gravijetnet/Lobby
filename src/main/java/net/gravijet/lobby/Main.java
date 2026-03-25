@@ -32,7 +32,7 @@ public class Main extends JavaPlugin {
         serverSelectorManager = new ServerSelectorManager(this);
         serverSelectorManager.loadConfig();
 
-        // BungeeCord Channel registrieren
+        // Register BungeeCord channel
         getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
 
         getServer().getPluginManager().registerEvents(new LobbyListener(this), this);
@@ -41,7 +41,6 @@ public class Main extends JavaPlugin {
         getCommand("spawn").setExecutor(new SpawnCommand(this));
         getCommand("fly").setExecutor(new FlyCommand(this));
 
-        // Check for PlaceholderAPI
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             hasPlaceholderAPI = true;
             getLogger().info("PlaceholderAPI found - enabling placeholder support");
@@ -49,7 +48,6 @@ public class Main extends JavaPlugin {
             getLogger().warning("PlaceholderAPI not found - placeholders will not work");
         }
 
-        // Check for PhoenixAPI
         if (Bukkit.getPluginManager().getPlugin("PhoenixAPI") != null) {
             hasPhoenixAPI = true;
             getLogger().info("PhoenixAPI found - enabling rank support");
@@ -64,14 +62,11 @@ public class Main extends JavaPlugin {
         loadSpawnLocation();
         scoreboardManager = Bukkit.getScoreboardManager();
         startScoreboardUpdater();
-
-        // Start Tablist updater
         startTablistUpdater();
     }
 
     @Override
     public void onDisable() {
-        // BungeeCord Channel unregistrieren
         getServer().getMessenger().unregisterOutgoingPluginChannel(this);
     }
 
@@ -97,13 +92,12 @@ public class Main extends JavaPlugin {
 
     public void updateScoreboard(Player player) {
         Scoreboard board = scoreboardManager.getNewScoreboard();
-        // 1.8 API: registerNewObjective hat nur 2 Parameter, DisplayName separat setzen
+        // 1.8 API: registerNewObjective only takes 2 parameters; display name is set separately
         Objective objective = board.registerNewObjective("lobby", "dummy");
-        objective.setDisplayName("§a§lGravijet.net");
+        objective.setDisplayName("§c§lGravijet.net");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
 
-        // Scoreboard-Zeilen mit PlaceholderAPI
-        int score = 15; // Höherer Startwert für mehr Platz
+        int score = 15;
 
         int playtime = 0;
         try {
@@ -112,18 +106,18 @@ public class Main extends JavaPlugin {
             playtime = 0;
         }
 
-        // Jede Zeile muss eindeutig sein!
+        // Each entry must be unique
         objective.getScore("§7§m-------------------").setScore(score--);
-        objective.getScore("§8» §aRank: §6" + getPlaceholder(player, "%phoenix_player_real_rank%")).setScore(score--);
-        objective.getScore("§8» §aPlayers: §6" + getPlaceholder(player, "%phoenix_server_global_online%")).setScore(score--);
-        objective.getScore("§8» §aCoins: §6" + getPlaceholder(player, "%pxcosmetics_player_coins%")).setScore(score--);
-        objective.getScore("§8» §aLevel: §6" + getPlaceholder(player, "%phoenix_player_level_displayname%")).setScore(score--);
-        objective.getScore("§8» §aPlaytime: §6" + playtime + "§6h").setScore(score--);
-        objective.getScore("§f ").setScore(score--); // Leerzeichen macht es eindeutig
+        objective.getScore("§8» §cRank: §6" + getPlaceholder(player, "%phoenix_player_real_rank%")).setScore(score--);
+        objective.getScore("§8» §cPlayers: §6" + getPlaceholder(player, "%phoenix_server_global_online%")).setScore(score--);
+        objective.getScore("§8» §cCoins: §6" + getPlaceholder(player, "%pxcosmetics_player_coins%")).setScore(score--);
+        objective.getScore("§8» §cLevel: §6" + getPlaceholder(player, "%phoenix_player_level_displayname%")).setScore(score--);
+        objective.getScore("§8» §cPlaytime: §6" + playtime + "§6h").setScore(score--);
+        objective.getScore("§f ").setScore(score--);
         objective.getScore("§7§ogravijet.net").setScore(score--);
-        objective.getScore("§7§o§m-------------------").setScore(score--); // Unterschiedliche Endung
+        objective.getScore("§7§o§m-------------------").setScore(score--);
 
-        // Nametag-Teams auf dasselbe Scoreboard setzen, damit sie nicht verloren gehen
+        // Attach nametag teams to the same scoreboard so they are not lost on update
         if (hasPhoenixAPI) {
             for (Player online : Bukkit.getOnlinePlayers()) {
                 addNametagToBoard(board, online);
@@ -153,14 +147,14 @@ public class Main extends JavaPlugin {
             }
 
             String formattedPrefix = ChatColor.translateAlternateColorCodes('&', prefix);
-            // Prefix auf 16 Zeichen begrenzen (1.8 Limit)
+            // Prefix limited to 16 characters (1.8 limit)
             if (formattedPrefix.length() > 16) {
                 formattedPrefix = formattedPrefix.substring(0, 16);
             }
             team.setPrefix(formattedPrefix);
-            // team.setColor() existiert nicht in 1.8 API → weggelassen
+            // team.setColor() does not exist in 1.8 API — omitted
         } catch (Exception e) {
-            // Ignorieren falls PhoenixAPI Fehler wirft
+            // Ignore errors thrown by PhoenixAPI
         }
     }
 
@@ -168,7 +162,6 @@ public class Main extends JavaPlugin {
         if (!hasPhoenixAPI) return;
 
         try {
-            // Get player's profile using PhoenixAPI
             Object profileManager = getPhoenixProfileManager();
             if (profileManager == null) return;
 
@@ -184,11 +177,11 @@ public class Main extends JavaPlugin {
                 player.setPlayerListName(displayName);
             }
         } catch (Exception e) {
-            getLogger().warning("Error updating tablist for " + player.getName() + ": " + e.getMessage());
+            getLogger().warning("Error updating tab list for " + player.getName() + ": " + e.getMessage());
         }
     }
 
-    // PhoenixAPI Reflection Methods
+    // PhoenixAPI reflection helpers
     private Object getPhoenixProfileManager() {
         try {
             Class<?> phoenixClass = Class.forName("xyz.refinedev.phoenix.Phoenix");
@@ -235,12 +228,12 @@ public class Main extends JavaPlugin {
         if (hasPlaceholderAPI) {
             return me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, placeholder);
         }
-        // Fallback values if PlaceholderAPI is not available
+        // Fallback values when PlaceholderAPI is not available
         switch (placeholder) {
             case "%phoenix_player_rank%":
                 if (player.hasPermission("lobby.visibility.staff")) return "Staff";
                 if (player.hasPermission("lobby.visibility.vip")) return "VIP";
-                return "Spieler";
+                return "Player";
             case "%phoenix_server_global_online%":
                 return String.valueOf(Bukkit.getOnlinePlayers().size());
             case "%pxcosmetics_player_coins%":
@@ -262,7 +255,7 @@ public class Main extends JavaPlugin {
     }
 
     public void setupPlayer(Player player) {
-        // Auto-Fly für Spieler mit Berechtigung - IMMER aktivieren
+        // Auto-fly for players with permission — always enable
         if (player.hasPermission("lobby.fly")) {
             player.setAllowFlight(true);
             player.setFlying(true);
@@ -280,7 +273,7 @@ public class Main extends JavaPlugin {
         player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 1, false, false));
         player.addPotionEffect(new PotionEffect(PotionEffectType.JUMP, Integer.MAX_VALUE, 0, false, false));
 
-        // Inventar clearen (kein setItemInOffHand in 1.8)
+        // Clear inventory (no setItemInOffHand in 1.8)
         player.getInventory().clear();
 
         setupInventory(player);
@@ -294,55 +287,53 @@ public class Main extends JavaPlugin {
         }
     }
 
-    private void setupInventory(Player player) {
-        // Hotbar wird NICHT mit Glasscheiben gefüllt - nur bestimmte Slots bekommen Items
-
-        // Slot 0: Server Selector (Kompass)
+    public void setupInventory(Player player) {
+        // Slot 0: Server Selector (compass)
         ItemStack serverSelector = new ItemStack(Material.COMPASS);
         ItemMeta selectorMeta = serverSelector.getItemMeta();
-        selectorMeta.setDisplayName("§aServer Selector");
+        selectorMeta.setDisplayName("§cServer Selector");
         serverSelector.setItemMeta(selectorMeta);
         player.getInventory().setItem(0, serverSelector);
 
         // Slot 1: Ender Butt
         ItemStack enderButt = new ItemStack(Material.ENDER_PEARL);
         ItemMeta enderMeta = enderButt.getItemMeta();
-        enderMeta.setDisplayName("§aEnder Butt");
+        enderMeta.setDisplayName("§cEnder Butt");
         enderButt.setItemMeta(enderMeta);
         player.getInventory().setItem(1, enderButt);
 
-        // Slot 2: Coinshop (Goldbarren)
+        // Slot 2: Coinshop (gold ingot)
         ItemStack coinshop = new ItemStack(Material.GOLD_INGOT);
         ItemMeta coinshopMeta = coinshop.getItemMeta();
-        coinshopMeta.setDisplayName("§aCoinshop");
+        coinshopMeta.setDisplayName("§cCoinshop");
         coinshop.setItemMeta(coinshopMeta);
         player.getInventory().setItem(2, coinshop);
 
         // Slot 6: Settings
         ItemStack settings = new ItemStack(Material.REDSTONE_TORCH_ON);
         ItemMeta settingsMeta = settings.getItemMeta();
-        settingsMeta.setDisplayName("§aSettings");
+        settingsMeta.setDisplayName("§cSettings");
         settings.setItemMeta(settingsMeta);
         player.getInventory().setItem(6, settings);
 
-        // Slot 7: Friends (Spielerkopf) — in 1.8: SKULL_ITEM mit Damage 3
+        // Slot 7: Friends (player skull) — 1.8: SKULL_ITEM with damage 3
         ItemStack friends = new ItemStack(Material.SKULL_ITEM, 1, (short) 3);
         SkullMeta friendsMeta = (SkullMeta) friends.getItemMeta();
-        friendsMeta.setDisplayName("§aFriends");
+        friendsMeta.setDisplayName("§cFriends");
         friendsMeta.setOwner(player.getName());
         friends.setItemMeta(friendsMeta);
         player.getInventory().setItem(7, friends);
 
-        // Slot 8: Visibility Item
+        // Slot 8: Visibility toggle
         updateVisibilityItem(player);
 
-        // Die Slots 3, 4, 5 bleiben leer (keine Glasscheiben)
+        // Slots 3, 4, 5 remain empty
     }
 
     public void updateVisibilityItem(Player player) {
         String visibility = getConfig().getString("players." + player.getUniqueId() + ".visibility", "ALL");
 
-        // In 1.8 gibt es keine LIME_DYE etc. — alles ist INK_SACK mit Damage-Wert
+        // 1.8: no LIME_DYE etc. — use INK_SACK with damage values
         short dyeDamage;
         String displayName;
         switch (visibility) {
@@ -360,7 +351,7 @@ public class Main extends JavaPlugin {
                 break;
             default:
                 dyeDamage = 10; // lime
-                displayName = "§aAll players are visible";
+                displayName = "§cAll players are visible";
                 break;
         }
 
@@ -374,18 +365,22 @@ public class Main extends JavaPlugin {
     public void updatePlayerVisibility(Player player) {
         String visibility = getConfig().getString("players." + player.getUniqueId() + ".visibility", "ALL");
 
-        // 1.8 API: showPlayer/hidePlayer hat keinen Plugin-Parameter
+        // Read permission nodes from config (configurable in config.yml under visibility:)
+        String vipPerm = getConfig().getString("visibility.vip-permission", "lobby.visibility.vip");
+        String staffPerm = getConfig().getString("visibility.staff-permission", "lobby.visibility.staff");
+
+        // 1.8 API: showPlayer/hidePlayer has no plugin parameter
         for (Player online : Bukkit.getOnlinePlayers()) {
             switch (visibility) {
                 case "VIP":
-                    if (online.hasPermission("lobby.visibility.vip")) {
+                    if (online.hasPermission(vipPerm)) {
                         player.showPlayer(online);
                     } else {
                         player.hidePlayer(online);
                     }
                     break;
                 case "STAFF":
-                    if (online.hasPermission("lobby.visibility.staff")) {
+                    if (online.hasPermission(staffPerm)) {
                         player.showPlayer(online);
                     } else {
                         player.hidePlayer(online);
@@ -400,7 +395,6 @@ public class Main extends JavaPlugin {
             }
         }
 
-        // Tablist nach Sichtbarkeitsänderung aktualisieren
         Bukkit.getScheduler().runTask(this, () -> updateTablist(player));
     }
 
@@ -409,10 +403,10 @@ public class Main extends JavaPlugin {
         String next;
 
         switch (current) {
-            case "ALL": next = "VIP"; break;
-            case "VIP": next = "STAFF"; break;
-            case "STAFF": next = "NONE"; break;
-            default: next = "ALL"; break;
+            case "ALL":   next = "VIP";   break;
+            case "VIP":   next = "STAFF"; break;
+            case "STAFF": next = "NONE";  break;
+            default:      next = "ALL";   break;
         }
 
         getConfig().set("players." + player.getUniqueId() + ".visibility", next);
@@ -421,7 +415,7 @@ public class Main extends JavaPlugin {
         updateVisibilityItem(player);
         updatePlayerVisibility(player);
 
-        // Tablist für alle Spieler aktualisieren wenn sich Sichtbarkeit ändert
+        // Update tab list for all players after visibility change
         Bukkit.getScheduler().runTask(this, () -> {
             for (Player online : Bukkit.getOnlinePlayers()) {
                 updateTablist(online);
@@ -434,8 +428,9 @@ public class Main extends JavaPlugin {
     }
 
     /**
-     * Entfernt den Spieler aus dem Build-Modus-Set ohne Seiteneffekte (kein Inventar-Reset, kein Gamemode-Wechsel).
-     * Für Join/Quit verwenden, wo setupPlayer danach aufgerufen wird oder der Spieler weg ist.
+     * Removes the player from the build mode set without side effects
+     * (no inventory reset, no game mode change).
+     * Use on join/quit where setupPlayer is called afterwards or the player is already gone.
      */
     public void clearBuildMode(Player player) {
         buildModePlayers.remove(player.getUniqueId());
@@ -445,12 +440,10 @@ public class Main extends JavaPlugin {
         if (buildMode) {
             buildModePlayers.add(player.getUniqueId());
             player.setGameMode(GameMode.CREATIVE);
-            // Inventar clearen beim Betreten des Build-Modus
             player.getInventory().clear();
         } else {
             buildModePlayers.remove(player.getUniqueId());
             player.setGameMode(GameMode.ADVENTURE);
-            // Inventar clearen und Standard-Items setzen beim Verlassen
             player.getInventory().clear();
             setupInventory(player);
         }
