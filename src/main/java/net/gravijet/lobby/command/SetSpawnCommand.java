@@ -1,14 +1,15 @@
-package net.gravijet.lobby;
+package net.gravijet.lobby.command;
 
+import net.gravijet.lobby.Main;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-public class FlyCommand implements CommandExecutor {
+public class SetSpawnCommand implements CommandExecutor {
     private final Main plugin;
 
-    public FlyCommand(Main plugin) {
+    public SetSpawnCommand(Main plugin) {
         this.plugin = plugin;
     }
 
@@ -21,21 +22,13 @@ public class FlyCommand implements CommandExecutor {
 
         Player player = (Player) sender;
 
-        if (!player.hasPermission("lobby.fly")) {
+        if (!player.hasPermission("lobby.setspawn")) {
             player.sendMessage("§cNo permission!");
             return true;
         }
 
-        if (player.getAllowFlight()) {
-            player.setAllowFlight(false);
-            player.setFlying(false);
-            player.sendMessage("§cFly disabled!");
-        } else {
-            player.setAllowFlight(true);
-            player.setFlying(true);
-            player.sendMessage("§aFly enabled!");
-        }
-
+        plugin.setSpawnLocation(player.getLocation());
+        player.sendMessage("§aSpawn location set!");
         return true;
     }
 }

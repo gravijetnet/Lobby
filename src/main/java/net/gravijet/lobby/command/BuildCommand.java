@@ -1,5 +1,6 @@
-package net.gravijet.lobby;
+package net.gravijet.lobby.command;
 
+import net.gravijet.lobby.Main;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;

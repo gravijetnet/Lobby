@@ -1,7 +1,8 @@
-package net.gravijet.lobby;
+package net.gravijet.lobby.selector;
 
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
+import net.gravijet.lobby.Main;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -31,7 +32,6 @@ public class ServerSelectorManager {
     }
 
     public void openServerSelector(Player player) {
-        // Always use the default menu for all versions
         ConfigurationSection menuConfig = config.getConfigurationSection("server-selector.default");
 
         if (menuConfig == null) {
@@ -45,17 +45,6 @@ public class ServerSelectorManager {
 
         Inventory gui = Bukkit.createInventory(null, size, title);
 
-    /*    // Fill all slots with gray glass panes
-        ItemStack glassPane = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta glassMeta = glassPane.getItemMeta();
-        glassMeta.setDisplayName(" ");
-        glassPane.setItemMeta(glassMeta);
-
-        for (int i = 0; i < size; i++) {
-            gui.setItem(i, glassPane);
-        } */
-
-        // Set configured items
         ConfigurationSection itemsSection = menuConfig.getConfigurationSection("items");
         if (itemsSection != null) {
             for (String key : itemsSection.getKeys(false)) {
@@ -102,7 +91,6 @@ public class ServerSelectorManager {
             }
             meta.setLore(lore);
 
-            // Hide all attributes and stats (HIDE_DYE does not exist in 1.8 — omitted)
             meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
             meta.addItemFlags(ItemFlag.HIDE_DESTROYS);
             meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
@@ -117,7 +105,6 @@ public class ServerSelectorManager {
 
     public void handleMenuClick(Player player, int slot) {
         ConfigurationSection menuConfig = config.getConfigurationSection("server-selector.default");
-
         if (menuConfig == null) return;
 
         ConfigurationSection itemsSection = menuConfig.getConfigurationSection("items");
@@ -135,14 +122,12 @@ public class ServerSelectorManager {
     private void executeActions(Player player, List<String> actions) {
         for (String action : actions) {
             if (action.startsWith("connect:")) {
-                String server = action.substring(8);
-                connectToServer(player, server);
+                connectToServer(player, action.substring(8));
             } else if (action.startsWith("command:")) {
-                String command = action.substring(8).replace("%player%", player.getName());
-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(),
+                        action.substring(8).replace("%player%", player.getName()));
             } else if (action.startsWith("playercommand:")) {
-                String command = action.substring(14).replace("%player%", player.getName());
-                player.performCommand(command);
+                player.performCommand(action.substring(14).replace("%player%", player.getName()));
             }
         }
     }
