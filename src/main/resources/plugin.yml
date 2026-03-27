@@ -16,6 +16,10 @@ commands:
   fly:
     description: Toggle fly mode
     usage: /<command>
+  zone:
+    description: Manage lobby placement zones
+    usage: /zone <give|save|delete|list|clear|info>
+    permission: lobby.zone
 permissions:
   lobby.build:
     description: Access to build mode
@@ -31,4 +35,7 @@ permissions:
     default: false
   lobby.visibility.staff:
     description: Staff visibility
+    default: op
+  lobby.zone:
+    description: Manage placement zones and see zone outlines
     default: op
