@@ -32,12 +32,22 @@ jobs:
 
     - name: Move JAR to root and Commit
       run: |
-        # Sucht die Lobby-JAR und benennt sie um
-        mv target/Lobby-!(*shaded*).jar ./lobby-latest.jar || mv target/Lobby-[0-9]*.jar ./lobby-latest.jar
+        # Sucht im target-Ordner nach einer .jar Datei, die 'Lobby' im Namen hat,
+        # aber NICHT 'shaded', 'sources' oder 'javadoc' enthält.
+        JAR_PATH=$(find target/ -name "Lobby-*.jar" ! -name "*shaded*" ! -name "*-sources.jar" ! -name "*-javadoc.jar" | head -n 1)
+        
+        if [ -z "$JAR_PATH" ]; then
+          echo "Fehler: Keine passende JAR gefunden!"
+          exit 1
+        fi
+        
+        echo "Gefundene JAR: $JAR_PATH"
+        mv "$JAR_PATH" ./lobby-latest.jar
         
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         
         git add -f lobby-latest.jar
-        git commit -m "Update Lobby JAR" || echo "No changes to commit"
+        # Ganz wichtig: [skip ci] hinzufügen, damit der Bot keine Endlosschleife baut!
+        git commit -m "Update Lobby JAR [skip ci]" || echo "No changes to commit"
         git push
