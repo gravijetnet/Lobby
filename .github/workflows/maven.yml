@@ -1,4 +1,4 @@
-name: Build and Release Lobby
+name: Build and Permanent Release Lobby
 
 on:
   push:
@@ -9,10 +9,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Essential for creating Releases
+      contents: write
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout Source
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Set up JDK 21
       uses: actions/setup-java@v4
@@ -24,27 +27,40 @@ jobs:
     - name: Build with Maven
       run: mvn -B package --file pom.xml
 
-    - name: Prepare JAR for Release
+    - name: Prepare JAR
       run: |
-        # Find the correct Lobby JAR (excluding shaded, sources, javadoc)
+        # Find the JAR, excluding shaded/sources/javadoc
         JAR_PATH=$(find target/ -name "Lobby-*.jar" ! -name "*shaded*" ! -name "*-sources.jar" ! -name "*-javadoc.jar" | head -n 1)
         
-        if [ -z "$JAR_PATH" ]; then
-          echo "Error: No Lobby JAR found!"
-          exit 1
+        if [ -z "$JAR_PATH" ]; then 
+          echo "Error: Lobby JAR not found"; 
+          exit 1; 
         fi
         
-        # Copy to a fixed name for the release
+        # Create a unique filename for the permanent archive
+        cp "$JAR_PATH" ./lobby-build-${{ github.run_number }}.jar
+        # Create a static filename for the 'latest' link
         cp "$JAR_PATH" ./lobby-latest.jar
 
-    - name: Upload to Release
+    # Step 1: Create a PERMANENT release for this specific build
+    - name: Create Archive Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: build-${{ github.run_number }}
+        name: "Lobby Build #${{ github.run_number }}"
+        body: "Permanent archive of Lobby Build #${{ github.run_number }}"
+        files: lobby-build-${{ github.run_number }}.jar
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # Step 2: Update the LATEST release (replaces the file to keep it clean)
+    - name: Update Latest Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: latest
         name: "Lobby Latest Build"
-        body: "Automated build from commit ${{ github.sha }} \nDate: ${{ github.event.head_commit.timestamp }}"
-        draft: false
-        prerelease: false
+        body: "This is the most recent successful build (#${{ github.run_number }})."
+        make_latest: true
         files: lobby-latest.jar
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
