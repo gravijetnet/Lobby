@@ -11,6 +11,7 @@ import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.entity.EnderPearl;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -298,6 +299,7 @@ public class LobbyListener implements Listener {
         if ((action == Action.RIGHT_CLICK_BLOCK || action == Action.LEFT_CLICK_BLOCK)
                 && clicked != null) {
             event.setCancelled(true);
+            event.setUseInteractedBlock(Event.Result.DENY);
         }
 
         if (item == null) return;
