@@ -1,53 +1,121 @@
 package net.gravijet.lobby.zone;
 
 import org.bukkit.Location;
+import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Immutable polygon zone defined by 2-D corner points (X, Z) and Y-bounds.
- * Block-placement inside this zone is forbidden for non-build-mode players.
+ * Polygon zone defined by 2-D corner points (X, Z) and Y-bounds.
+ *
+ * Geometry (corners, worldName, minY, maxY) is set at construction and never
+ * mutated.  Access-control state (requiredPermission, denyMessage) is mutable
+ * via package-private setters so ZoneManager can update it without replacing
+ * the whole object.
  *
  * Containment uses the ray-casting algorithm: a ray in the +X direction
  * from the test point counts edge crossings. An odd count means inside.
  */
 public final class Zone {
 
-    private final String     name;
-    private final String     worldName;
-    private final int        minY;
-    private final int        maxY;
+    // -------------------------------------------------------------------------
+    // Immutable geometry
+    // -------------------------------------------------------------------------
+
+    private final String      name;
+    private final String      worldName;
+    private final int         minY;
+    private final int         maxY;
     /** Each element is int[]{x, z}. Minimum 3 entries for a valid polygon. */
     private final List<int[]> corners;
 
+    // -------------------------------------------------------------------------
+    // Mutable access control (updated by ZoneManager only)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Permission node required to enter this zone. {@code null} means the zone
+     * is open to all players.
+     */
+    private String requiredPermission;
+
+    /**
+     * Message sent (and title shown) when a player is denied entry.
+     * Supports §-colour codes.
+     */
+    private String denyMessage;
+
+    private static final String DEFAULT_DENY_MESSAGE = "§cYou are not allowed to enter this area!";
+
+    // -------------------------------------------------------------------------
+    // Constructor
+    // -------------------------------------------------------------------------
+
     Zone(String name, String worldName, int minY, int maxY, List<int[]> corners) {
-        this.name      = name;
-        this.worldName = worldName;
-        this.minY      = minY;
-        this.maxY      = maxY;
-        this.corners   = Collections.unmodifiableList(new ArrayList<>(corners));
+        this.name                = name;
+        this.worldName           = worldName;
+        this.minY                = minY;
+        this.maxY                = maxY;
+        this.corners             = Collections.unmodifiableList(new ArrayList<>(corners));
+        this.requiredPermission  = null;
+        this.denyMessage         = DEFAULT_DENY_MESSAGE;
     }
 
     // -------------------------------------------------------------------------
-    // Accessors
+    // Geometry accessors (immutable)
     // -------------------------------------------------------------------------
 
-    public String getName()      { return name; }
-    public String getWorldName() { return worldName; }
-    public int    getMinY()      { return minY; }
-    public int    getMaxY()      { return maxY; }
+    public String getName()       { return name; }
+    public String getWorldName()  { return worldName; }
+    public int    getMinY()       { return minY; }
+    public int    getMaxY()       { return maxY; }
 
     /** Unmodifiable list of [x, z] pairs in selection order. */
     public List<int[]> getCorners() { return corners; }
+
+    // -------------------------------------------------------------------------
+    // Access-control accessors
+    // -------------------------------------------------------------------------
+
+    /** The permission node required to enter, or {@code null} if unrestricted. */
+    public String getRequiredPermission() { return requiredPermission; }
+
+    /** The message sent to players who are denied entry. Never {@code null}. */
+    public String getDenyMessage()        { return denyMessage; }
+
+    /** Returns {@code true} if this zone has an entry restriction. */
+    public boolean isRestricted() { return requiredPermission != null && !requiredPermission.isEmpty(); }
+
+    /**
+     * Returns {@code true} if the given player does NOT have the required
+     * permission to enter this zone.  Always returns {@code false} when the
+     * zone is unrestricted.
+     */
+    public boolean isRestrictedFor(Player player) {
+        if (!isRestricted()) return false;
+        return !player.hasPermission(requiredPermission);
+    }
+
+    // -------------------------------------------------------------------------
+    // Access-control mutators (package-private — only ZoneManager may call)
+    // -------------------------------------------------------------------------
+
+    void setRequiredPermission(String permission) {
+        this.requiredPermission = (permission != null && !permission.isEmpty()) ? permission : null;
+    }
+
+    void setDenyMessage(String message) {
+        this.denyMessage = (message != null && !message.isEmpty()) ? message : DEFAULT_DENY_MESSAGE;
+    }
 
     // -------------------------------------------------------------------------
     // Containment
     // -------------------------------------------------------------------------
 
     /**
-     * Returns true if the given block location is inside this zone.
+     * Returns {@code true} if the given block location is inside this zone.
      * Tests the block-centre point (blockX + 0.5, blockZ + 0.5).
      */
     public boolean contains(Location loc) {
@@ -59,6 +127,18 @@ public final class Zone {
         if (corners.size() < 3) return false;
 
         return isInsidePolygon(loc.getBlockX() + 0.5, loc.getBlockZ() + 0.5);
+    }
+
+    /**
+     * Returns {@code true} if the given fractional (player-position) coordinates
+     * are inside this zone. Used for movement checks where the exact floating-
+     * point position matters more than a block-centre approximation.
+     */
+    public boolean containsPoint(String worldName, double x, double y, double z) {
+        if (!this.worldName.equals(worldName)) return false;
+        if (y < minY || y > maxY) return false;
+        if (corners.size() < 3) return false;
+        return isInsidePolygon(x, z);
     }
 
     /**
@@ -74,7 +154,6 @@ public final class Zone {
             double xj = corners.get(j)[0];
             double zj = corners.get(j)[1];
 
-            // Only edges that straddle pz contribute to the crossing count.
             if (((zi > pz) != (zj > pz))
                     && (px < (xj - xi) * (pz - zi) / (zj - zi) + xi)) {
                 inside = !inside;
@@ -87,13 +166,6 @@ public final class Zone {
     // Geometry helpers for particle rendering (package-private)
     // -------------------------------------------------------------------------
 
-    /**
-     * Returns evenly-spaced points (x, y, z) along all polygon edges at the
-     * given Y-level. Used by ZoneManager to render edge particles.
-     *
-     * @param y      world Y at which to emit particles
-     * @param spacing block-unit distance between consecutive points
-     */
     List<double[]> edgePoints(double y, double spacing) {
         List<double[]> out = new ArrayList<>();
         int n = corners.size();
@@ -119,10 +191,6 @@ public final class Zone {
         return out;
     }
 
-    /**
-     * Returns corner-pillar particle points: a short column at each corner
-     * going from {@code baseY} up by {@code height} blocks in steps of 0.5.
-     */
     List<double[]> cornerPillarPoints(double baseY, double height) {
         List<double[]> out = new ArrayList<>();
         for (int[] c : corners) {
@@ -135,10 +203,14 @@ public final class Zone {
         return out;
     }
 
+    // -------------------------------------------------------------------------
+
     @Override
     public String toString() {
         return "Zone{name=" + name + ", world=" + worldName
                 + ", corners=" + corners.size()
-                + ", y=[" + minY + "," + maxY + "]}";
+                + ", y=[" + minY + "," + maxY + "]"
+                + (isRestricted() ? ", perm=" + requiredPermission : "")
+                + "}";
     }
 }
