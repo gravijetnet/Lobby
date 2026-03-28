@@ -38,6 +38,6 @@ jobs:
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         
-        git add lobby-latest.jar
+        git add -f lobby-latest.jar
         git commit -m "Update Lobby JAR [skip ci]" || echo "No changes to commit"
         git push
