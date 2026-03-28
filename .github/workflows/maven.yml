@@ -1,53 +1,49 @@
-# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-maven
-
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-name: Java CI with Maven
+name: Build Lobby
 
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  workflow_dispatch: # Erlaubt es dir, den Build manuell zu starten
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
         java-version: '21'
         distribution: 'temurin'
         cache: maven
+
     - name: Build with Maven
       run: mvn -B package --file pom.xml
 
     - name: Move JAR to root and Commit
       run: |
-        # Sucht im target-Ordner nach einer .jar Datei, die 'Lobby' im Namen hat,
-        # aber NICHT 'shaded', 'sources' oder 'javadoc' enthält.
+        # Sucht die Lobby JAR, ignoriert shaded/sources/javadoc
         JAR_PATH=$(find target/ -name "Lobby-*.jar" ! -name "*shaded*" ! -name "*-sources.jar" ! -name "*-javadoc.jar" | head -n 1)
         
         if [ -z "$JAR_PATH" ]; then
-          echo "Fehler: Keine passende JAR gefunden!"
+          echo "Fehler: Keine Lobby JAR gefunden!"
           exit 1
         fi
         
-        echo "Gefundene JAR: $JAR_PATH"
+        echo "Gefundene Datei: $JAR_PATH"
         mv "$JAR_PATH" ./lobby-latest.jar
         
+        # Git Bot konfigurieren
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         
+        # Datei mit Force (-f) hinzufügen, falls .gitignore sie blockiert
         git add -f lobby-latest.jar
-        # Ganz wichtig: [skip ci] hinzufügen, damit der Bot keine Endlosschleife baut!
         git commit -m "Update Lobby JAR [skip ci]" || echo "No changes to commit"
         git push
