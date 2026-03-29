@@ -29,38 +29,36 @@ jobs:
 
     - name: Prepare JAR
       run: |
-        # Find the JAR, excluding shaded/sources/javadoc
         JAR_PATH=$(find target/ -name "Lobby-*.jar" ! -name "*shaded*" ! -name "*-sources.jar" ! -name "*-javadoc.jar" | head -n 1)
-        
-        if [ -z "$JAR_PATH" ]; then 
-          echo "Error: Lobby JAR not found"; 
-          exit 1; 
-        fi
-        
-        # Create a unique filename for the permanent archive
+        if [ -z "$JAR_PATH" ]; then exit 1; fi
         cp "$JAR_PATH" ./lobby-build-${{ github.run_number }}.jar
-        # Create a static filename for the 'latest' link
         cp "$JAR_PATH" ./lobby-latest.jar
 
-    # Step 1: Create a PERMANENT release for this specific build
     - name: Create Archive Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: build-${{ github.run_number }}
         name: "Lobby Build #${{ github.run_number }}"
-        body: "Permanent archive of Lobby Build #${{ github.run_number }}"
+        body: "Archive of Build #${{ github.run_number }}"
         files: lobby-build-${{ github.run_number }}.jar
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    # Step 2: Update the LATEST release (replaces the file to keep it clean)
+    - name: Delete Old Latest Tag
+      run: |
+        git tag -d latest || true
+        git push origin :refs/tags/latest || true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Update Latest Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: latest
         name: "Lobby Latest Build"
-        body: "This is the most recent successful build (#${{ github.run_number }})."
-        make_latest: true
+        body: "This release contains the latest executable and source code from the main branch."
         files: lobby-latest.jar
+        prerelease: false
+        make_latest: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
