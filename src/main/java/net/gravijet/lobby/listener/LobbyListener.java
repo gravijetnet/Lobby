@@ -904,7 +904,6 @@ public class LobbyListener implements Listener {
             case COOKED_FISH:
             case COOKED_MUTTON:
             case COOKED_RABBIT:
-            case COOKED_PORK:
             // Miscellaneous
             case COMPASS:
             case WATCH:
