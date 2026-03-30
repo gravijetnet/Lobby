@@ -47,6 +47,12 @@ public final class Zone {
      */
     private String denyMessage;
 
+    /**
+     * Whether block placement is allowed in this zone for non-build-mode players.
+     * Default false (protected).
+     */
+    private boolean allowBlockPlacement;
+
     private static final String DEFAULT_DENY_MESSAGE = "§cYou are not allowed to enter this area!";
 
     // -------------------------------------------------------------------------
@@ -61,6 +67,7 @@ public final class Zone {
         this.corners             = Collections.unmodifiableList(new ArrayList<>(corners));
         this.requiredPermission  = null;
         this.denyMessage         = DEFAULT_DENY_MESSAGE;
+        this.allowBlockPlacement = false;
     }
 
     // -------------------------------------------------------------------------
@@ -84,6 +91,9 @@ public final class Zone {
 
     /** The message sent to players who are denied entry. Never {@code null}. */
     public String getDenyMessage()        { return denyMessage; }
+
+    /** Whether block placement is allowed in this zone for non-build-mode players. */
+    public boolean isAllowBlockPlacement() { return allowBlockPlacement; }
 
     /** Returns {@code true} if this zone has an entry restriction. */
     public boolean isRestricted() { return requiredPermission != null && !requiredPermission.isEmpty(); }
@@ -114,11 +124,21 @@ public final class Zone {
     // -------------------------------------------------------------------------
 
     void setRequiredPermission(String permission) {
-        this.requiredPermission = (permission != null && !permission.isEmpty()) ? permission : null;
+        if (permission != null) {
+            permission = permission.trim();
+            if (permission.isEmpty()) {
+                permission = null;
+            }
+        }
+        this.requiredPermission = permission;
     }
 
     void setDenyMessage(String message) {
         this.denyMessage = (message != null && !message.isEmpty()) ? message : DEFAULT_DENY_MESSAGE;
+    }
+
+    void setAllowBlockPlacement(boolean allow) {
+        this.allowBlockPlacement = allow;
     }
 
     // -------------------------------------------------------------------------

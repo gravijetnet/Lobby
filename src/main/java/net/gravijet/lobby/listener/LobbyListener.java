@@ -104,6 +104,7 @@ public class LobbyListener implements Listener {
     private void tickAccessCheck() {
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (plugin.isInBuildMode(player)) continue;
+            if (player.hasPermission("lobby.zone")) continue; // Admins can always enter
 
             Zone restricted = zoneManager.getDeniedZoneAt(player, player.getLocation());
             if (restricted == null) continue;
@@ -447,33 +448,43 @@ public class LobbyListener implements Listener {
         if (plugin.isInBuildMode(player)) return;
 
         ItemStack item = event.getItemInHand();
-        if (isLobbyBlock(item)) {
-            Block placed = event.getBlockPlaced();
+        Block placed = event.getBlockPlaced();
+        Location loc = placed.getLocation();
 
-            if (zoneManager.isInsideAnyZone(placed.getLocation())) {
+        // Check if block is inside any zone
+        Zone zone = zoneManager.getZoneAt(loc);
+        if (zone != null) {
+            // Block is inside a zone
+            if (!zone.isAllowBlockPlacement()) {
                 event.setCancelled(true);
-                player.sendMessage("§cYou can't place blocks here!");
+                player.sendMessage("§cYou can't place blocks in this zone!");
                 return;
             }
+            // Zone allows block placement, continue
+        }
+        // Not inside a zone OR zone allows placement
 
-            scheduleLobbyBlock(placed.getLocation());
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                ItemStack slot4 = player.getInventory().getItem(4);
-                if (slot4 != null && isLobbyBlock(slot4)) {
-                    slot4.setAmount(64);
-                } else {
-                    ItemStack fresh = new ItemStack(Material.SANDSTONE, 64);
-                    ItemMeta meta = fresh.getItemMeta();
-                    meta.setDisplayName("§cLobby Blocks");
-                    fresh.setItemMeta(meta);
-                    player.getInventory().setItem(4, fresh);
-                }
-                player.updateInventory();
-            });
+        // Only lobby blocks are allowed for non-build-mode players
+        if (!isLobbyBlock(item)) {
+            event.setCancelled(true);
             return;
         }
 
-        event.setCancelled(true);
+        // Lobby block special handling
+        scheduleLobbyBlock(loc);
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            ItemStack slot4 = player.getInventory().getItem(4);
+            if (slot4 != null && isLobbyBlock(slot4)) {
+                slot4.setAmount(64);
+            } else {
+                ItemStack fresh = new ItemStack(Material.SANDSTONE, 64);
+                ItemMeta meta = fresh.getItemMeta();
+                meta.setDisplayName("§cLobby Blocks");
+                fresh.setItemMeta(meta);
+                player.getInventory().setItem(4, fresh);
+            }
+            player.updateInventory();
+        });
     }
 
     // =========================================================================
@@ -677,6 +688,7 @@ public class LobbyListener implements Listener {
         // ── 3. VIP-zone border check ──────────────────────────────────────────
         // Only runs when the player physically moved to a new block.
         if (plugin.isInBuildMode(player)) return;
+        if (player.hasPermission("lobby.zone")) return; // Admins can always enter
 
         Zone restricted = zoneManager.getDeniedZoneAt(player, to);
         if (restricted == null) return;

@@ -162,6 +162,13 @@ public final class ZoneManager {
     public boolean setZonePermission(String zoneName, String permission) {
         Zone zone = zones.get(zoneName.toLowerCase());
         if (zone == null) return false;
+        // Trim permission string to avoid issues with trailing spaces
+        if (permission != null) {
+            permission = permission.trim();
+            if (permission.isEmpty()) {
+                permission = null;
+            }
+        }
         zone.setRequiredPermission(permission);
         saveAll();
         return true;
@@ -181,6 +188,21 @@ public final class ZoneManager {
         // Replace \n with actual newline characters
         message = message.replace("\\n", "\n");
         zone.setDenyMessage(ChatColor.translateAlternateColorCodes('&', message));
+        saveAll();
+        return true;
+    }
+
+    /**
+     * Sets whether block placement is allowed in the named zone for non-build-mode players.
+     *
+     * @param zoneName zone name (case-insensitive)
+     * @param allow    true to allow block placement, false to deny
+     * @return {@code true} if the zone was found and updated
+     */
+    public boolean setZoneAllowBlockPlacement(String zoneName, boolean allow) {
+        Zone zone = zones.get(zoneName.toLowerCase());
+        if (zone == null) return false;
+        zone.setAllowBlockPlacement(allow);
         saveAll();
         return true;
     }
@@ -230,11 +252,21 @@ public final class ZoneManager {
         if (worldName == null) return null;
 
         for (Zone zone : zones.values()) {
+            // Skip zones that don't have permission restrictions
             if (!zone.isRestricted()) continue;
-            if (zone.containsPoint(worldName, loc.getX(), loc.getY(), loc.getZ())
-                    && !zone.canEnter(player)) {
+
+            // Check if player is inside this zone
+            if (!zone.containsPoint(worldName, loc.getX(), loc.getY(), loc.getZ())) {
+                continue;
+            }
+
+            // Player is inside a restricted zone
+            // Check if they have permission to enter
+            if (!zone.canEnter(player)) {
+                // Player does NOT have permission
                 return zone;
             }
+            // Player has permission, continue checking other zones
         }
         return null;
     }
@@ -397,7 +429,12 @@ public final class ZoneManager {
 
         // Access-control fields (optional)
         String perm = sec.getString("required-permission", "");
-        if (!perm.isEmpty()) zone.setRequiredPermission(perm);
+        if (!perm.isEmpty()) {
+            perm = perm.trim();
+            if (!perm.isEmpty()) {
+                zone.setRequiredPermission(perm);
+            }
+        }
 
         String msg = sec.getString("deny-message", "");
         if (!msg.isEmpty()) {
@@ -405,6 +442,9 @@ public final class ZoneManager {
             msg = msg.replace("\\n", "\n");
             zone.setDenyMessage(ChatColor.translateAlternateColorCodes('&', msg));
         }
+
+        boolean allowBlockPlacement = sec.getBoolean("allow-block-placement", false);
+        zone.setAllowBlockPlacement(allowBlockPlacement);
 
         return zone;
     }
@@ -426,5 +466,6 @@ public final class ZoneManager {
         // Replace newlines with \n for storage
         String denyMessage = zone.getDenyMessage().replace("\n", "\\n");
         plugin.getConfig().set(path + ".deny-message", denyMessage);
+        plugin.getConfig().set(path + ".allow-block-placement", zone.isAllowBlockPlacement());
     }
 }
