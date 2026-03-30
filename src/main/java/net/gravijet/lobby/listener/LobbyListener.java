@@ -45,9 +45,9 @@ public class LobbyListener implements Listener {
     private final Main        plugin;
     private final ZoneManager zoneManager;
 
-    // Ender Butt: active pearls and previous Y for skip-through detection
+    // Ender Butt: active pearls and previous location for skip-through detection
     private final Map<UUID, EnderPearl> enderButtPearls = new HashMap<>();
-    private final Map<UUID, Double>     lastPearlY      = new HashMap<>();
+    private final Map<UUID, Location>   lastPearlLoc    = new HashMap<>();
 
     // Lobby block lifecycle: location → {task1 (sandstone→redstone), task2 (redstone→air)}
     private final Map<Location, int[]> lobbyBlockTasks = new HashMap<>();
@@ -131,61 +131,261 @@ public class LobbyListener implements Listener {
 
             if (pearl.isDead() || !pearl.isValid()) {
                 it.remove();
-                lastPearlY.remove(uuid);
+                lastPearlLoc.remove(uuid);
                 continue;
             }
 
-            Location loc      = pearl.getLocation();
-            double   currentY = loc.getY();
-            double   prevY    = lastPearlY.getOrDefault(uuid, currentY);
-            lastPearlY.put(uuid, currentY);
+            Location currentLoc = pearl.getLocation();
+            Location prevLoc    = lastPearlLoc.get(uuid);
+            lastPearlLoc.put(uuid, currentLoc.clone());
             Vector vel = pearl.getVelocity();
 
+            // Speed limit: prevent extreme velocities that could bypass collision detection
+            double speed = vel.length();
+            if (speed > 2.5) { // Too fast, likely hacked or bugged
+                it.remove();
+                lastPearlLoc.remove(uuid);
+                pearl.eject();
+                pearl.remove();
+                Player rider = Bukkit.getPlayer(uuid);
+                if (rider != null) {
+                    rider.teleport(findSafeLocation(rider.getLocation()));
+                }
+                continue;
+            }
+
             // Hard ceiling at Y=200
-            if (currentY > 200) {
-                Location capped = loc.clone();
+            if (currentLoc.getY() > 200) {
+                Location capped = currentLoc.clone();
                 capped.setY(200.0);
                 pearl.teleport(capped);
                 pearl.setVelocity(new Vector(vel.getX(), Math.min(vel.getY(), 0.0), vel.getZ()));
-                lastPearlY.put(uuid, 200.0);
+                lastPearlLoc.put(uuid, capped.clone());
                 continue;
             }
 
-            // Block penetration scan
+            // ----- ENHANCED COLLISION DETECTION -----
             boolean blocked = false;
-            if (loc.getBlock().getType().isSolid()) {
+
+            // 1. Check current position
+            if (isSolidBlock(currentLoc.getBlock())) {
                 blocked = true;
             }
-            if (!blocked) {
-                int minY = (int) Math.floor(Math.min(prevY, currentY));
-                int maxY = (int) Math.floor(Math.max(prevY, currentY));
-                if (minY != maxY) {
-                    int bx = loc.getBlockX(), bz = loc.getBlockZ();
-                    for (int y = minY; y <= maxY && !blocked; y++) {
-                        if (loc.getWorld().getBlockAt(bx, y, bz).getType().isSolid()) blocked = true;
-                    }
-                }
+
+            // 2. Check line collision between previous and current location
+            if (!blocked && prevLoc != null) {
+                blocked = checkLineCollision(prevLoc, currentLoc);
             }
-            // Player body ceiling clip
+
+            // 3. Enhanced: Check player's collision box (head, feet, body)
             if (!blocked) {
                 Player rider = Bukkit.getPlayer(uuid);
                 if (rider != null && rider.isInsideVehicle()) {
                     Location feet = rider.getLocation();
-                    if (feet.getBlock().getType().isSolid()
-                            || rider.getEyeLocation().getBlock().getType().isSolid()
-                            || feet.clone().add(0, 1.8, 0).getBlock().getType().isSolid()) {
-                        blocked = true;
+
+                    // Check multiple points throughout player's body
+                    for (double dy = 0; dy <= 1.8 && !blocked; dy += 0.3) {
+                        Location bodyPoint = feet.clone().add(0, dy, 0);
+                        // Check a small cross section at this height
+                        for (double dx = -0.3; dx <= 0.3 && !blocked; dx += 0.3) {
+                            for (double dz = -0.3; dz <= 0.3 && !blocked; dz += 0.3) {
+                                Location checkLoc = bodyPoint.clone().add(dx, 0, dz);
+                                if (isSolidBlock(checkLoc.getBlock())) {
+                                    blocked = true;
+                                }
+                            }
+                        }
+                    }
+
+                    // Also check if player is completely inside a solid block
+                    if (!blocked) {
+                        // Check 8 points around player's body for solid blocks
+                        int solidCount = 0;
+                        for (double dx = -0.5; dx <= 0.5; dx += 1.0) {
+                            for (double dy = 0; dy <= 1.8; dy += 1.8) {
+                                for (double dz = -0.5; dz <= 0.5; dz += 1.0) {
+                                    Location corner = feet.clone().add(dx, dy, dz);
+                                    if (isSolidBlock(corner.getBlock())) {
+                                        solidCount++;
+                                    }
+                                }
+                            }
+                        }
+                        // If most corners are solid, player is likely stuck
+                        if (solidCount >= 6) {
+                            blocked = true;
+                        }
+                    }
+                }
+            }
+
+            // 4. Final safety: If pearl is inside any solid block, stop it
+            if (!blocked) {
+                // Check immediate surrounding blocks of pearl
+                Location pearlLoc = pearl.getLocation();
+                for (int dx = -1; dx <= 1 && !blocked; dx++) {
+                    for (int dy = -1; dy <= 1 && !blocked; dy++) {
+                        for (int dz = -1; dz <= 1 && !blocked; dz++) {
+                            if (dx == 0 && dy == 0 && dz == 0) continue;
+                            Location checkLoc = pearlLoc.clone().add(dx, dy, dz);
+                            if (isSolidBlock(checkLoc.getBlock())) {
+                                // Check if pearl is very close to this solid block
+                                double distance = pearlLoc.distance(checkLoc);
+                                if (distance < 1.5) {
+                                    blocked = true;
+                                }
+                            }
+                        }
                     }
                 }
             }
 
             if (blocked) {
                 it.remove();
-                lastPearlY.remove(uuid);
+                lastPearlLoc.remove(uuid);
                 pearl.eject();
                 pearl.remove();
+
+                // Teleport player to safe location if stuck
+                Player rider = Bukkit.getPlayer(uuid);
+                if (rider != null) {
+                    // Find safe location nearby
+                    Location safeLoc = findSafeLocation(rider.getLocation());
+                    if (safeLoc != null) {
+                        rider.teleport(safeLoc);
+                    }
+                }
             }
         }
+    }
+
+    /**
+     * Check for solid blocks along a line between two points
+     * Uses Bresenham line algorithm to check all blocks along the path
+     */
+    private boolean checkLineCollision(Location from, Location to) {
+        if (from == null || to == null || !from.getWorld().equals(to.getWorld())) {
+            return false;
+        }
+
+        // Calculate number of steps needed (at least 1 per block)
+        double dx = to.getX() - from.getX();
+        double dy = to.getY() - from.getY();
+        double dz = to.getZ() - from.getZ();
+        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+        // If distance is very small, skip line check
+        if (distance < 0.1) {
+            return false;
+        }
+
+        // Number of steps: at least 4 per block to ensure no gaps
+        int steps = Math.max(4, (int) (distance * 4));
+
+        for (int i = 0; i <= steps; i++) {
+            double t = (double) i / steps;
+            double x = from.getX() + dx * t;
+            double y = from.getY() + dy * t;
+            double z = from.getZ() + dz * t;
+
+            Location checkLoc = new Location(from.getWorld(), x, y, z);
+            if (isSolidBlock(checkLoc.getBlock())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Enhanced block solidity check for 1.8.8
+     * Includes special blocks that should prevent Ender Butt movement
+     */
+    private boolean isSolidBlock(Block block) {
+        if (block == null) return false;
+
+        Material type = block.getType();
+        if (type == Material.AIR) return false;
+
+        // Standard solid blocks
+        if (type.isSolid()) return true;
+
+        // Special cases in 1.8.8 that should block movement
+        switch (type) {
+            // These blocks have collision even if not fully solid
+            case WATER:
+            case STATIONARY_WATER:
+            case LAVA:
+            case STATIONARY_LAVA:
+            case WEB:
+            case LADDER:
+            case VINE:
+            case SNOW:
+            case CARPET:
+            // Trapdoors, fences, walls, etc.
+            case IRON_TRAPDOOR:
+            case TRAP_DOOR:
+            case FENCE:
+            case FENCE_GATE:
+            case NETHER_FENCE:
+            case COBBLE_WALL:
+            // Slabs and stairs
+            case STEP:
+            case WOOD_STEP:
+            case DOUBLE_STEP:
+            case WOOD_DOUBLE_STEP:
+            case STAIRS:
+            case BIRCH_WOOD_STAIRS:
+            case SPRUCE_WOOD_STAIRS:
+            case JUNGLE_WOOD_STAIRS:
+            case SANDSTONE_STAIRS:
+            case RED_SANDSTONE_STAIRS:
+            case QUARTZ_STAIRS:
+            case ACACIA_STAIRS:
+            case DARK_OAK_STAIRS:
+            // Other
+            case BED_BLOCK:
+            case SKULL:
+            case PISTON_BASE:
+            case PISTON_STICKY_BASE:
+            case PISTON_EXTENSION:
+            case PISTON_MOVING_PIECE:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Find a safe non-solid location near the given location
+     */
+    private Location findSafeLocation(Location loc) {
+        if (loc == null) return null;
+
+        // Check current location
+        if (!isSolidBlock(loc.getBlock()) &&
+            !isSolidBlock(loc.clone().add(0, 1, 0).getBlock()) &&
+            !isSolidBlock(loc.clone().add(0, 2, 0).getBlock())) {
+            return loc;
+        }
+
+        // Search in increasing radius
+        for (int radius = 1; radius <= 5; radius++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    for (int dy = -radius; dy <= radius; dy++) {
+                        Location check = loc.clone().add(dx, dy, dz);
+                        if (!isSolidBlock(check.getBlock()) &&
+                            !isSolidBlock(check.clone().add(0, 1, 0).getBlock()) &&
+                            !isSolidBlock(check.clone().add(0, 2, 0).getBlock())) {
+                            return check;
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     // =========================================================================
@@ -212,7 +412,7 @@ public class LobbyListener implements Listener {
         plugin.clearBuildMode(player);
 
         EnderPearl pearl = enderButtPearls.remove(player.getUniqueId());
-        lastPearlY.remove(player.getUniqueId());
+        lastPearlLoc.remove(player.getUniqueId());
         if (pearl != null && !pearl.isDead()) {
             pearl.eject();
             pearl.remove();
@@ -293,9 +493,14 @@ public class LobbyListener implements Listener {
         // Zone Wand is handled entirely by ZoneListener.
         if (ZoneManager.isWand(item) && player.hasPermission("lobby.zone")) return;
 
-        // Let vanilla handle lobby-block placement; BlockPlaceEvent takes over.
-        if (item != null && isLobbyBlock(item) && action == Action.RIGHT_CLICK_BLOCK) return;
+        // Allow lobby block placement but prevent interaction with clicked block
+        if (item != null && isLobbyBlock(item) && action == Action.RIGHT_CLICK_BLOCK) {
+            // Deny interaction with the clicked block, but allow block placement
+            event.setUseInteractedBlock(Event.Result.DENY);
+            return;
+        }
 
+        // Cancel all other block interactions (doors, trapdoors, noteblocks, etc.)
         if ((action == Action.RIGHT_CLICK_BLOCK || action == Action.LEFT_CLICK_BLOCK)
                 && clicked != null) {
             event.setCancelled(true);
@@ -315,13 +520,14 @@ public class LobbyListener implements Listener {
             if (item.getType() == Material.ENDER_PEARL && nameEquals(item, "§cEnder Butt")) {
                 UUID uuid = player.getUniqueId();
                 EnderPearl old = enderButtPearls.remove(uuid);
-                lastPearlY.remove(uuid);
+                lastPearlLoc.remove(uuid);
                 if (old != null && !old.isDead()) { old.eject(); old.remove(); }
                 player.playSound(player.getLocation(), Sound.ENDERMAN_TELEPORT, 1.0f, 1.0f);
                 EnderPearl pearl = player.launchProjectile(EnderPearl.class);
                 pearl.setVelocity(player.getLocation().getDirection().multiply(1.5));
                 pearl.setPassenger(player);
                 enderButtPearls.put(uuid, pearl);
+                lastPearlLoc.put(uuid, pearl.getLocation().clone());
                 Bukkit.getScheduler().runTask(plugin, player::updateInventory);
                 return;
             }
@@ -365,7 +571,7 @@ public class LobbyListener implements Listener {
         if (uuid == null) return;
 
         enderButtPearls.remove(uuid);
-        lastPearlY.remove(uuid);
+        lastPearlLoc.remove(uuid);
         pearl.eject();
         pearl.remove();
     }
@@ -542,7 +748,7 @@ public class LobbyListener implements Listener {
     private void ejectAndCancelPearl(Player player) {
         if (player.isInsideVehicle()) player.getVehicle().eject();
         EnderPearl pearl = enderButtPearls.remove(player.getUniqueId());
-        lastPearlY.remove(player.getUniqueId());
+        lastPearlLoc.remove(player.getUniqueId());
         if (pearl != null && !pearl.isDead()) { pearl.eject(); pearl.remove(); }
     }
 
