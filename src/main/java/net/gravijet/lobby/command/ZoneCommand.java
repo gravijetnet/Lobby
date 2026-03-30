@@ -3,6 +3,8 @@ package net.gravijet.lobby.command;
 import net.gravijet.lobby.Main;
 import net.gravijet.lobby.zone.Zone;
 import net.gravijet.lobby.zone.ZoneManager;
+import net.gravijet.lobby.zone.JumpPadManager;
+import net.gravijet.lobby.zone.JumpPad;
 import net.gravijet.lobby.zone.ZoneSelectionSession;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -15,7 +17,7 @@ import java.util.Collection;
  * Handles the {@code /zone} command and all its sub-commands.
  *
  * <pre>
- * /zone give                         – Give the Zone Wand to the sender
+ * /zone wand                         – Give the Zone Wand to the sender
  * /zone save <name> [minY] [maxY]    – Save current selection as a named zone
  * /zone delete <name>                – Delete a saved zone
  * /zone list                         – List all saved zones
@@ -44,34 +46,44 @@ public final class ZoneCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!(sender instanceof Player)) {
-            sender.sendMessage("Only players can use this command.");
-            return true;
-        }
-
-        Player player = (Player) sender;
-
-        if (!player.hasPermission("lobby.zone")) {
-            player.sendMessage("§cYou don't have permission to use zone commands.");
+        // Permission check for all zone commands
+        if (!sender.hasPermission("lobby.zone")) {
+            sender.sendMessage("§cYou don't have permission to use zone commands.");
             return true;
         }
 
         if (args.length == 0) {
-            sendUsage(player);
+            sendUsage(sender);
             return true;
         }
 
-        switch (args[0].toLowerCase()) {
-            case "give":       handleGive(player);                break;
-            case "save":       handleSave(player, args);          break;
-            case "delete":     handleDelete(player, args);        break;
-            case "list":       handleList(player);                break;
-            case "clear":      handleClear(player);               break;
-            case "info":       handleInfo(player, args);          break;
-            case "setperm":    handleSetPerm(player, args);       break;
-            case "clearperm":  handleClearPerm(player, args);     break;
-            case "setmessage": handleSetMessage(player, args);    break;
-            default:           sendUsage(player);                 break;
+        String subCommand = args[0].toLowerCase();
+
+        // Subcommands that require a player (give, save, clear)
+        if (subCommand.equals("wand") || subCommand.equals("save") || subCommand.equals("clear") || subCommand.equals("jumppad")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("§cThis subcommand can only be used by players.");
+                return true;
+            }
+            Player player = (Player) sender;
+            switch (subCommand) {
+                case "wand":       handleGive(player);                break;
+                case "save":       handleSave(player, args);          break;
+                case "clear":      handleClear(player);               break;
+                case "jumppad":   handleJumpPad(player, args);       break;
+            }
+            return true;
+        }
+
+        // Subcommands that can be used by console or players
+        switch (subCommand) {
+            case "delete":     handleDelete(sender, args);        break;
+            case "list":       handleList(sender);                break;
+            case "info":       handleInfo(sender, args);          break;
+            case "setperm":    handleSetPerm(sender, args);       break;
+            case "clearperm":  handleClearPerm(sender, args);     break;
+            case "setmessage": handleSetMessage(sender, args);    break;
+            default:           sendUsage(sender);                 break;
         }
         return true;
     }
@@ -81,7 +93,7 @@ public final class ZoneCommand implements CommandExecutor {
     // =========================================================================
 
     /**
-     * /zone give
+     * /zone wand
      * Gives the player a Zone Wand.
      */
     private void handleGive(Player player) {
@@ -112,7 +124,7 @@ public final class ZoneCommand implements CommandExecutor {
         ZoneSelectionSession session = zoneManager.getSession(player.getUniqueId());
         if (session == null || !session.isComplete()) {
             player.sendMessage("§cYou need at least 3 corners in your selection!");
-            player.sendMessage("§7Use §e/zone give §7to get the Zone Wand first.");
+            player.sendMessage("§7Use §e/zone wand §7to get the Zone Wand first.");
             return;
         }
 
@@ -150,17 +162,17 @@ public final class ZoneCommand implements CommandExecutor {
     /**
      * /zone delete &lt;name&gt;
      */
-    private void handleDelete(Player player, String[] args) {
+    private void handleDelete(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            player.sendMessage("§cUsage: /zone delete <name>");
+            sender.sendMessage("§cUsage: /zone delete <name>");
             return;
         }
 
         String name = args[1];
         if (zoneManager.deleteZone(name)) {
-            player.sendMessage("§aZone §f'" + name + "' §adeleted.");
+            sender.sendMessage("§aZone §f'" + name + "' §adeleted.");
         } else {
-            player.sendMessage("§cNo zone named §f'" + name + "' §cfound.");
+            sender.sendMessage("§cNo zone named §f'" + name + "' §cfound.");
         }
     }
 
@@ -168,17 +180,17 @@ public final class ZoneCommand implements CommandExecutor {
      * /zone list
      * Prints all zone names, one per line. Restricted zones are marked with a lock.
      */
-    private void handleList(Player player) {
+    private void handleList(CommandSender sender) {
         Collection<Zone> all = zoneManager.getAllZones();
         if (all.isEmpty()) {
-            player.sendMessage("§7No zones are currently defined.");
+            sender.sendMessage("§7No zones are currently defined.");
             return;
         }
-        player.sendMessage("§6Zones §7(" + all.size() + "):");
+        sender.sendMessage("§6Zones §7(" + all.size() + "):");
         int i = 1;
         for (Zone zone : all) {
             String restrictedMarker = zone.isRestricted() ? " §c[VIP: " + zone.getRequiredPermission() + "]" : "";
-            player.sendMessage(String.format("§7  %d. §f%s §8[%s, Y:%d–%d, %d corners]%s",
+            sender.sendMessage(String.format("§7  %d. §f%s §8[%s, Y:%d–%d, %d corners]%s",
                     i++,
                     zone.getName(),
                     zone.getWorldName(),
@@ -199,34 +211,105 @@ public final class ZoneCommand implements CommandExecutor {
     }
 
     /**
+     * /zone jumppad <name> <strength> [minY] [maxY]
+     * Converts the player's current session into a jump pad that launches players upward.
+     */
+    private void handleJumpPad(Player player, String[] args) {
+        if (args.length < 3) {
+            player.sendMessage("§cUsage: /zone jumppad <name> <strength> [minY] [maxY]");
+            player.sendMessage("§7Strength is a multiplier (e.g., 1.5). Direction is always upward.");
+            return;
+        }
+
+        String name = args[1];
+        if (name.contains(" ") || name.isEmpty()) {
+            player.sendMessage("§cJump pad name must not contain spaces.");
+            return;
+        }
+
+        double strength;
+        try {
+            strength = Double.parseDouble(args[2]);
+        } catch (NumberFormatException e) {
+            player.sendMessage("§cStrength must be a number.");
+            return;
+        }
+        if (strength <= 0) {
+            player.sendMessage("§cStrength must be positive.");
+            return;
+        }
+
+        ZoneSelectionSession session = zoneManager.getSession(player.getUniqueId());
+        if (session == null || !session.isComplete()) {
+            player.sendMessage("§cYou need at least 3 corners in your selection!");
+            player.sendMessage("§7Use §e/zone wand §7to get the Zone Wand first.");
+            return;
+        }
+
+        // Parse optional Y bounds
+        int minY = 0;
+        int maxY = 256;
+        if (args.length >= 5) {
+            try {
+                minY = Integer.parseInt(args[3]);
+                maxY = Integer.parseInt(args[4]);
+            } catch (NumberFormatException e) {
+                player.sendMessage("§cminY and maxY must be integers.");
+                return;
+            }
+            if (minY > maxY) {
+                player.sendMessage("§cminY (" + minY + ") must be <= maxY (" + maxY + ").");
+                return;
+            }
+        } else if (args.length == 4) {
+            player.sendMessage("§cProvide both minY and maxY, or neither.");
+            return;
+        }
+
+        try {
+            JumpPadManager jumpPadManager = plugin.getJumpPadManager();
+            if (jumpPadManager == null) {
+                player.sendMessage("§cJump pad system not available.");
+                return;
+            }
+            JumpPad pad = jumpPadManager.saveJumpPad(name, session, minY, maxY, strength, 0.0, 1.0, 0.0, 1000L);
+            zoneManager.clearSession(player.getUniqueId());
+            player.sendMessage("§aJump pad §f'" + pad.getName() + "' §asaved with strength §f" + strength + "§a.");
+            player.sendMessage("§7Direction: upward, Cooldown: 1000 ms");
+        } catch (IllegalArgumentException e) {
+            player.sendMessage("§c" + e.getMessage());
+        }
+    }
+
+    /**
      * /zone info &lt;name&gt;
      * Prints corner coordinates, world, and Y-bounds of the named zone.
      */
-    private void handleInfo(Player player, String[] args) {
+    private void handleInfo(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            player.sendMessage("§cUsage: /zone info <name>");
+            sender.sendMessage("§cUsage: /zone info <name>");
             return;
         }
 
         Zone zone = zoneManager.getZone(args[1]);
         if (zone == null) {
-            player.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
+            sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
             return;
         }
 
-        player.sendMessage("§6§l--- Zone: " + zone.getName() + " ---");
-        player.sendMessage("§7World:      §f" + zone.getWorldName());
-        player.sendMessage("§7Y-range:    §f" + zone.getMinY() + " §8– §f" + zone.getMaxY());
-        player.sendMessage("§7Corners:    §f" + zone.getCorners().size());
+        sender.sendMessage("§6§l--- Zone: " + zone.getName() + " ---");
+        sender.sendMessage("§7World:      §f" + zone.getWorldName());
+        sender.sendMessage("§7Y-range:    §f" + zone.getMinY() + " §8– §f" + zone.getMaxY());
+        sender.sendMessage("§7Corners:    §f" + zone.getCorners().size());
         int idx = 1;
         for (int[] c : zone.getCorners()) {
-            player.sendMessage(String.format("§7  #%d §8» §f(%d, %d)", idx++, c[0], c[1]));
+            sender.sendMessage(String.format("§7  #%d §8» §f(%d, %d)", idx++, c[0], c[1]));
         }
         if (zone.isRestricted()) {
-            player.sendMessage("§7Permission: §c" + zone.getRequiredPermission());
-            player.sendMessage("§7Deny msg:   §f" + zone.getDenyMessage());
+            sender.sendMessage("§7Permission: §c" + zone.getRequiredPermission());
+            sender.sendMessage("§7Deny msg:   §f" + zone.getDenyMessage());
         } else {
-            player.sendMessage("§7Permission: §anone (open to all)");
+            sender.sendMessage("§7Permission: §anone (open to all)");
         }
     }
 
@@ -234,17 +317,17 @@ public final class ZoneCommand implements CommandExecutor {
      * /zone setperm &lt;name&gt; &lt;permission&gt;
      * Restricts the named zone to players who have the given permission.
      */
-    private void handleSetPerm(Player player, String[] args) {
+    private void handleSetPerm(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            player.sendMessage("§cUsage: /zone setperm <name> <permission>");
+            sender.sendMessage("§cUsage: /zone setperm <name> <permission>");
             return;
         }
         String name = args[1];
         String perm = args[2];
         if (zoneManager.setZonePermission(name, perm)) {
-            player.sendMessage("§aZone §f'" + name + "' §anow requires permission §f" + perm + "§a.");
+            sender.sendMessage("§aZone §f'" + name + "' §anow requires permission §f" + perm + "§a.");
         } else {
-            player.sendMessage("§cNo zone named §f'" + name + "' §cfound.");
+            sender.sendMessage("§cNo zone named §f'" + name + "' §cfound.");
         }
     }
 
@@ -252,16 +335,16 @@ public final class ZoneCommand implements CommandExecutor {
      * /zone clearperm &lt;name&gt;
      * Removes the permission restriction from the named zone (open to all).
      */
-    private void handleClearPerm(Player player, String[] args) {
+    private void handleClearPerm(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            player.sendMessage("§cUsage: /zone clearperm <name>");
+            sender.sendMessage("§cUsage: /zone clearperm <name>");
             return;
         }
         String name = args[1];
         if (zoneManager.setZonePermission(name, null)) {
-            player.sendMessage("§aPermission restriction removed from zone §f'" + name + "' §a(now open to all).");
+            sender.sendMessage("§aPermission restriction removed from zone §f'" + name + "' §a(now open to all).");
         } else {
-            player.sendMessage("§cNo zone named §f'" + name + "' §cfound.");
+            sender.sendMessage("§cNo zone named §f'" + name + "' §cfound.");
         }
     }
 
@@ -271,9 +354,9 @@ public final class ZoneCommand implements CommandExecutor {
      * and {@code \n} for multi-line messages.
      * The message may contain spaces — all args after the zone name are joined.
      */
-    private void handleSetMessage(Player player, String[] args) {
+    private void handleSetMessage(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            player.sendMessage("§cUsage: /zone setmessage <name> <message...>");
+            sender.sendMessage("§cUsage: /zone setmessage <name> <message...>");
             return;
         }
         String name = args[1];
@@ -285,9 +368,9 @@ public final class ZoneCommand implements CommandExecutor {
         // Allow \n in the command input to produce multi-line deny messages.
         String message = sb.toString().replace("\\n", "\n");
         if (zoneManager.setZoneDenyMessage(name, message)) {
-            player.sendMessage("§aDeny-message for zone §f'" + name + "' §aset.");
+            sender.sendMessage("§aDeny-message for zone §f'" + name + "' §aset.");
         } else {
-            player.sendMessage("§cNo zone named §f'" + name + "' §cfound.");
+            sender.sendMessage("§cNo zone named §f'" + name + "' §cfound.");
         }
     }
 
@@ -297,7 +380,7 @@ public final class ZoneCommand implements CommandExecutor {
 
     private void sendUsage(CommandSender sender) {
         sender.sendMessage("§c§lGraviJet §7\u00bb §f§lZone §8- §7Commands");
-        sender.sendMessage("§4\u25cf §c/zone give §7\u00bb §fGet the Zone Wand");
+        sender.sendMessage("§4\u25cf §c/zone wand §7\u00bb §fGet the Zone Wand");
         sender.sendMessage("§4\u25cf §c/zone save <name> [minY maxY] §7\u00bb §fSave selection as zone");
         sender.sendMessage("§4\u25cf §c/zone delete <name> §7\u00bb §fDelete a zone");
         sender.sendMessage("§4\u25cf §c/zone list §7\u00bb §fList all zones");

@@ -8,6 +8,8 @@ import net.gravijet.lobby.command.ZoneCommand;
 import net.gravijet.lobby.listener.LobbyListener;
 import net.gravijet.lobby.selector.ServerSelectorManager;
 import net.gravijet.lobby.zone.ZoneListener;
+import net.gravijet.lobby.zone.JumpPadManager;
+import net.gravijet.lobby.listener.JumpPadListener;
 import net.gravijet.lobby.zone.ZoneManager;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -42,6 +44,7 @@ public class Main extends JavaPlugin {
     private ScoreboardManager    scoreboardManager;
     private ServerSelectorManager serverSelectorManager;
     private ZoneManager           zoneManager;
+    private JumpPadManager        jumpPadManager;
     private boolean hasPlaceholderAPI = false;
     private boolean hasPhoenixAPI     = false;
 
@@ -60,10 +63,14 @@ public class Main extends JavaPlugin {
         zoneManager.loadZones();
         zoneManager.startParticleTask();
 
+        jumpPadManager = new JumpPadManager(this);
+        jumpPadManager.loadJumpPads();
+
         getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
 
         getServer().getPluginManager().registerEvents(new LobbyListener(this, zoneManager), this);
         getServer().getPluginManager().registerEvents(new ZoneListener(this, zoneManager),  this);
+        getServer().getPluginManager().registerEvents(new JumpPadListener(jumpPadManager), this);
 
         getCommand("build").setExecutor(new BuildCommand(this));
         getCommand("setspawn").setExecutor(new SetSpawnCommand(this));
@@ -100,6 +107,7 @@ public class Main extends JavaPlugin {
     @Override
     public void onDisable() {
         if (zoneManager != null) zoneManager.stopParticleTask();
+        if (jumpPadManager != null) jumpPadManager.saveAll();
         getServer().getMessenger().unregisterOutgoingPluginChannel(this);
     }
 
@@ -455,6 +463,7 @@ public class Main extends JavaPlugin {
 
     public ServerSelectorManager getServerSelectorManager() { return serverSelectorManager; }
     public ZoneManager           getZoneManager()           { return zoneManager; }
+    public JumpPadManager        getJumpPadManager()       { return jumpPadManager; }
 
     // -------------------------------------------------------------------------
     // Placeholder helpers

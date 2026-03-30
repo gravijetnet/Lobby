@@ -1,6 +1,7 @@
 package net.gravijet.lobby.command;
 
 import net.gravijet.lobby.Main;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -16,21 +17,43 @@ public class SpawnCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!(sender instanceof Player)) {
-            sender.sendMessage("Only players can use this command!");
-            return true;
+        // Determine target player
+        Player target;
+        if (args.length == 0) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("§cUsage: /spawn <player>");
+                return true;
+            }
+            target = (Player) sender;
+            if (!target.hasPermission("lobby.spawn")) {
+                target.sendMessage("§cNo permission!");
+                return true;
+            }
+        } else {
+            if (!sender.hasPermission("lobby.spawn.other")) {
+                sender.sendMessage("§cYou don't have permission to teleport others to spawn!");
+                return true;
+            }
+            target = Bukkit.getPlayer(args[0]);
+            if (target == null) {
+                sender.sendMessage("§cPlayer not found!");
+                return true;
+            }
         }
 
-        Player player = (Player) sender;
         Location spawn = plugin.getSpawnLocation();
-
         if (spawn == null) {
-            player.sendMessage("§cSpawn location not set!");
+            sender.sendMessage("§cSpawn location not set!");
             return true;
         }
 
-        player.teleport(spawn);
-        player.sendMessage("§aTeleported to spawn!");
+        target.teleport(spawn);
+        if (!target.equals(sender)) {
+            target.sendMessage("§aTeleported to spawn by " + sender.getName() + "!");
+            sender.sendMessage("§aTeleported " + target.getName() + " to spawn!");
+        } else {
+            sender.sendMessage("§aTeleported to spawn!");
+        }
         return true;
     }
 }

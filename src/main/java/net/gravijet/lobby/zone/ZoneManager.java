@@ -178,6 +178,8 @@ public final class ZoneManager {
     public boolean setZoneDenyMessage(String zoneName, String message) {
         Zone zone = zones.get(zoneName.toLowerCase());
         if (zone == null) return false;
+        // Replace \n with actual newline characters
+        message = message.replace("\\n", "\n");
         zone.setDenyMessage(ChatColor.translateAlternateColorCodes('&', message));
         saveAll();
         return true;
@@ -368,7 +370,11 @@ public final class ZoneManager {
         if (!perm.isEmpty()) zone.setRequiredPermission(perm);
 
         String msg = sec.getString("deny-message", "");
-        if (!msg.isEmpty()) zone.setDenyMessage(ChatColor.translateAlternateColorCodes('&', msg));
+        if (!msg.isEmpty()) {
+            // Replace \n with actual newline characters
+            msg = msg.replace("\\n", "\n");
+            zone.setDenyMessage(ChatColor.translateAlternateColorCodes('&', msg));
+        }
 
         return zone;
     }
@@ -387,6 +393,8 @@ public final class ZoneManager {
         if (zone.getRequiredPermission() != null) {
             plugin.getConfig().set(path + ".required-permission", zone.getRequiredPermission());
         }
-        plugin.getConfig().set(path + ".deny-message", zone.getDenyMessage());
+        // Replace newlines with \n for storage
+        String denyMessage = zone.getDenyMessage().replace("\n", "\\n");
+        plugin.getConfig().set(path + ".deny-message", denyMessage);
     }
 }
