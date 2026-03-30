@@ -37,9 +37,8 @@ public class Main extends JavaPlugin {
     private final Set<UUID> buildModePlayers = new HashSet<>();
     private ScoreboardManager    scoreboardManager;
     private ServerSelectorManager serverSelectorManager;
-        private ZoneManager           zoneManager;
+    private ZoneManager           zoneManager;
     private boolean hasPlaceholderAPI = false;
-    private boolean hasPhoenixAPI     = false;
 
     // -------------------------------------------------------------------------
     // Lifecycle
@@ -75,13 +74,6 @@ public class Main extends JavaPlugin {
             getLogger().warning("PlaceholderAPI not found — placeholders will not resolve.");
         }
 
-        if (Bukkit.getPluginManager().getPlugin("PhoenixAPI") != null) {
-            hasPhoenixAPI = true;
-            getLogger().info("PhoenixAPI found — rank support enabled.");
-        } else {
-            getLogger().warning("PhoenixAPI not found — rank prefixes will not resolve.");
-        }
-
         Bukkit.setDefaultGameMode(GameMode.SURVIVAL);
         loadSpawnLocation();
         scoreboardManager = Bukkit.getScoreboardManager();
@@ -91,7 +83,6 @@ public class Main extends JavaPlugin {
         }
 
         Bukkit.getScheduler().runTaskTimer(this, this::updateAllScoreboards, 0L, 20L);
-        Bukkit.getScheduler().runTaskTimer(this, this::updateAllTablists,   0L, 20L);
     }
 
     @Override
@@ -145,7 +136,6 @@ public class Main extends JavaPlugin {
 
         updatePlayerVisibility(player);
         updateScoreboard(player);
-        updateTablist(player);
 
         Location spawn = getSpawnLocation();
         if (spawn != null) {
@@ -264,8 +254,6 @@ public class Main extends JavaPlugin {
                     break;
             }
         }
-
-        Bukkit.getScheduler().runTask(this, () -> updateTablist(player));
     }
 
     public void cycleVisibilityMode(Player player) {
@@ -284,12 +272,6 @@ public class Main extends JavaPlugin {
 
         updateVisibilityItem(player);
         updatePlayerVisibility(player);
-
-        Bukkit.getScheduler().runTask(this, () -> {
-            for (Player online : Bukkit.getOnlinePlayers()) {
-                updateTablist(online);
-            }
-        });
     }
 
     // -------------------------------------------------------------------------
@@ -302,82 +284,20 @@ public class Main extends JavaPlugin {
         }
     }
 
-    private void updateAllTablists() {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            updateTablist(player);
-        }
-    }
-
     public void updateScoreboard(Player player) {
         Scoreboard board = scoreboardManager.getNewScoreboard();
         Objective objective = board.registerNewObjective("lobby", "dummy");
         objective.setDisplayName("§c§lexample.invalid");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
 
-        int playtime = 0;
-        try {
-            playtime = Integer.parseInt(
-                    getPlaceholder(player, "%phoenix_player_playtime_seconds%")) / 3600;
-        } catch (NumberFormatException ignored) { }
-
         int score = 15;
         objective.getScore("§7§m-------------------").setScore(score--);
-        objective.getScore("§8» §cRank: §6"    + getPlaceholder(player, "%phoenix_player_real_rank%")).setScore(score--);
-        objective.getScore("§8» §cPlayers: §6" + getPlaceholder(player, "%phoenix_server_global_online%")).setScore(score--);
-        objective.getScore("§8» §cCoins: §6"   + getPlaceholder(player, "%pxcosmetics_player_coins%")).setScore(score--);
-        objective.getScore("§8» §cLevel: §6"   + getPlaceholder(player, "%phoenix_player_level_displayname%")).setScore(score--);
-        objective.getScore("§8» §cPlaytime: §6" + playtime + "h").setScore(score--);
+        objective.getScore("§8» §cPlayers: §6" + Bukkit.getOnlinePlayers().size()).setScore(score--);
         objective.getScore("§f ").setScore(score--);
         objective.getScore("§7§oexample.invalid").setScore(score--);
         objective.getScore("§7§o§m-------------------").setScore(score--);
 
-        if (hasPhoenixAPI) {
-            for (Player online : Bukkit.getOnlinePlayers()) {
-                applyRankNametag(board, online);
-            }
-        }
-
         player.setScoreboard(board);
-    }
-
-    private void applyRankNametag(Scoreboard board, Player target) {
-        try {
-            Object profileManager = getPhoenixProfileManager();
-            if (profileManager == null) return;
-            Object profile = getProfileByPlayer(profileManager, target);
-            if (profile == null) return;
-            Object rank = getRankFromProfile(profile);
-            if (rank == null) return;
-            String prefix = getRankPrefix(rank);
-            if (prefix == null) return;
-
-            Team team = board.getTeam(target.getName());
-            if (team == null) team = board.registerNewTeam(target.getName());
-            if (!team.hasEntry(target.getName())) team.addEntry(target.getName());
-
-            String formatted = ChatColor.translateAlternateColorCodes('&', prefix);
-            if (formatted.length() > 16) formatted = formatted.substring(0, 16);
-            team.setPrefix(formatted);
-        } catch (Exception ignored) { }
-    }
-
-    public void updateTablist(Player player) {
-        if (!hasPhoenixAPI) return;
-        try {
-            Object profileManager = getPhoenixProfileManager();
-            if (profileManager == null) return;
-            Object profile = getProfileByPlayer(profileManager, player);
-            if (profile == null) return;
-            Object rank = getRankFromProfile(profile);
-            if (rank == null) return;
-            String prefix = getRankPrefix(rank);
-            if (prefix != null && !prefix.isEmpty()) {
-                String name = ChatColor.translateAlternateColorCodes('&', prefix) + " " + player.getName();
-                player.setPlayerListName(name);
-            }
-        } catch (Exception e) {
-            getLogger().warning("Error updating tab list for " + player.getName() + ": " + e.getMessage());
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -473,16 +393,13 @@ public class Main extends JavaPlugin {
         zoneManager.loadZones();
         zoneManager.startParticleTask();
 
-
-
         // Reapply world settings
         for (World world : Bukkit.getWorlds()) {
             setupWorld(world);
         }
 
-        // Re-check for PlaceholderAPI and PhoenixAPI
+        // Re-check for PlaceholderAPI
         hasPlaceholderAPI = Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null;
-        hasPhoenixAPI = Bukkit.getPluginManager().getPlugin("PhoenixAPI") != null;
 
         if (hasPlaceholderAPI) {
             getLogger().info("PlaceholderAPI found — placeholder support enabled.");
@@ -490,18 +407,11 @@ public class Main extends JavaPlugin {
             getLogger().warning("PlaceholderAPI not found — placeholders will not resolve.");
         }
 
-        if (hasPhoenixAPI) {
-            getLogger().info("PhoenixAPI found — rank support enabled.");
-        } else {
-            getLogger().warning("PhoenixAPI not found — rank prefixes will not resolve.");
-        }
-
         // Update visibility for all online players (permissions may have changed)
         for (Player player : Bukkit.getOnlinePlayers()) {
             updatePlayerVisibility(player);
             updateVisibilityItem(player);
             updateScoreboard(player);
-            updateTablist(player);
         }
 
         getLogger().info("Configuration reloaded successfully!");
@@ -515,43 +425,7 @@ public class Main extends JavaPlugin {
         if (hasPlaceholderAPI) {
             return me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, placeholder);
         }
-        switch (placeholder) {
-            case "%phoenix_player_real_rank%":         return "Player";
-            case "%phoenix_server_global_online%":     return String.valueOf(Bukkit.getOnlinePlayers().size());
-            case "%pxcosmetics_player_coins%":         return "0";
-            case "%phoenix_player_level_displayname%": return "1";
-            case "%phoenix_player_playtime_seconds%":  return "0";
-            default:                                   return placeholder;
-        }
-    }
-
-    // PhoenixAPI reflection helpers (avoids a hard compile-time dependency)
-
-    private Object getPhoenixProfileManager() {
-        try {
-            Class<?> c = Class.forName("xyz.refinedev.phoenix.Phoenix");
-            Object inst = c.getMethod("getInstance").invoke(null);
-            return c.getMethod("getProfileManager").invoke(inst);
-        } catch (Exception e) { return null; }
-    }
-
-    private Object getProfileByPlayer(Object profileManager, Player player) {
-        try {
-            return profileManager.getClass()
-                    .getMethod("getByPlayer", Player.class)
-                    .invoke(profileManager, player);
-        } catch (Exception e) { return null; }
-    }
-
-    private Object getRankFromProfile(Object profile) {
-        try {
-            return profile.getClass().getMethod("getRank").invoke(profile);
-        } catch (Exception e) { return null; }
-    }
-
-    private String getRankPrefix(Object rank) {
-        try {
-            return (String) rank.getClass().getMethod("getPrefix").invoke(rank);
-        } catch (Exception e) { return null; }
+        // Fallback for placeholders if PlaceholderAPI is not available
+        return placeholder;
     }
 }

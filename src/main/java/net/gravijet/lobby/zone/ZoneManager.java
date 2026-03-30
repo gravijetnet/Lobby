@@ -61,7 +61,7 @@ public final class ZoneManager {
         zones.clear();
         ConfigurationSection root = plugin.getConfig().getConfigurationSection("zones");
         if (root == null) {
-            plugin.getLogger().info("No zones section in config — starting empty.");
+
             return;
         }
         for (String name : root.getKeys(false)) {
@@ -70,7 +70,7 @@ public final class ZoneManager {
             Zone zone = deserializeZone(name, sec);
             if (zone != null) zones.put(name.toLowerCase(), zone);
         }
-        plugin.getLogger().info("Loaded " + zones.size() + " zone(s).");
+
     }
 
     public void saveAll() {
