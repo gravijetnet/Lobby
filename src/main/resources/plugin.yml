@@ -20,6 +20,10 @@ commands:
     description: Manage lobby placement zones
     usage: /zone <give|save|delete|list|clear|info|setperm|clearperm|setmessage>
     permission: lobby.zone
+  lobbyreload:
+    description: Reloads the plugin configuration
+    usage: /<command>
+    permission: lobby.reload
 permissions:
   lobby.build:
     description: Access to build mode
@@ -38,4 +42,7 @@ permissions:
     default: op
   lobby.zone:
     description: Manage placement zones and see zone outlines
+    default: op
+  lobby.reload:
+    description: Reload the plugin configuration
     default: op
