@@ -459,6 +459,28 @@ public class LobbyListener implements Listener {
 
         plugin.getLogger().info("[BLOCK PLACE] Player " + player.getName() + " attempting to place " + placed.getType() + " at " + loc.getBlockX() + "," + loc.getBlockY() + "," + loc.getBlockZ());
 
+        // Lobby blocks are always allowed for non-build-mode players
+        if (isLobbyBlock(item)) {
+            plugin.getLogger().info("[BLOCK PLACE] Lobby block placed, scheduling removal");
+            // Lobby block special handling
+            scheduleLobbyBlock(loc);
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                ItemStack slot4 = player.getInventory().getItem(4);
+                if (slot4 != null && isLobbyBlock(slot4)) {
+                    slot4.setAmount(64);
+                } else {
+                    ItemStack fresh = new ItemStack(Material.SANDSTONE, 64);
+                    ItemMeta meta = fresh.getItemMeta();
+                    meta.setDisplayName("§cLobby Blocks");
+                    fresh.setItemMeta(meta);
+                    player.getInventory().setItem(4, fresh);
+                }
+                player.updateInventory();
+            });
+            return; // Allow placement, no further checks needed
+        }
+
+        // For non-lobby blocks, check zone restrictions
         // Check if block is inside any zone (use block center for accurate checking)
         Location blockCenter = loc.clone().add(0.5, 0.5, 0.5);
         Zone zone = zoneManager.getZoneAt(blockCenter);
@@ -491,40 +513,16 @@ public class LobbyListener implements Listener {
             // Zone allows block placement, continue
             plugin.getLogger().info("[BLOCK PLACE] Zone " + zone.getName() + " allows block placement");
         } else {
-            // Not in any zone: only lobby blocks allowed
-            plugin.getLogger().info("[BLOCK PLACE] Not in any zone - checking if lobby block");
-            if (!isLobbyBlock(item)) {
-                event.setCancelled(true);
-                plugin.getLogger().info("[BLOCK PLACE] CANCELLED - Player " + player.getName() + " tried to place non-lobby block outside zone");
-                player.sendMessage("§cYou can only place Lobby Blocks outside of zones!");
-                return;
-            }
+            // Not in any zone: only lobby blocks allowed (but we already handled lobby blocks above)
+            // Since this is not a lobby block, cancel placement
+            event.setCancelled(true);
+            plugin.getLogger().info("[BLOCK PLACE] CANCELLED - Player " + player.getName() + " tried to place non-lobby block outside zone");
+            player.sendMessage("§cYou can only place Lobby Blocks outside of zones!");
+            return;
         }
 
-        // At this point:
-        // - Either we're in a zone with allow-block-placement: true (any block allowed)
-        // - Or we're not in any zone and the block is a lobby block
-        // Only handle lobby blocks specially (auto-removal and refill)
-        if (isLobbyBlock(item)) {
-            plugin.getLogger().info("[BLOCK PLACE] Lobby block placed, scheduling removal");
-            // Lobby block special handling
-            scheduleLobbyBlock(loc);
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                ItemStack slot4 = player.getInventory().getItem(4);
-                if (slot4 != null && isLobbyBlock(slot4)) {
-                    slot4.setAmount(64);
-                } else {
-                    ItemStack fresh = new ItemStack(Material.SANDSTONE, 64);
-                    ItemMeta meta = fresh.getItemMeta();
-                    meta.setDisplayName("§cLobby Blocks");
-                    fresh.setItemMeta(meta);
-                    player.getInventory().setItem(4, fresh);
-                }
-                player.updateInventory();
-            });
-        } else {
-            plugin.getLogger().info("[BLOCK PLACE] Non-lobby block allowed (in zone with allow-block-placement: true)");
-        }
+        // Non-lobby block allowed (in zone with allow-block-placement: true)
+        plugin.getLogger().info("[BLOCK PLACE] Non-lobby block allowed (in zone with allow-block-placement: true)");
     }
 
     // =========================================================================
