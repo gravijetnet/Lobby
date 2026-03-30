@@ -449,12 +449,15 @@ public class LobbyListener implements Listener {
 
         // Build-mode players can place any block anywhere
         if (plugin.isInBuildMode(player)) {
+            plugin.getLogger().info("[BLOCK PLACE] Build-mode player " + player.getName() + " placed " + event.getBlockPlaced().getType());
             return;
         }
 
         ItemStack item = event.getItemInHand();
         Block placed = event.getBlockPlaced();
         Location loc = placed.getLocation();
+
+        plugin.getLogger().info("[BLOCK PLACE] Player " + player.getName() + " attempting to place " + placed.getType() + " at " + loc.getBlockX() + "," + loc.getBlockY() + "," + loc.getBlockZ());
 
         // Check if block is inside any zone (use block center for accurate checking)
         Location blockCenter = loc.clone().add(0.5, 0.5, 0.5);
@@ -463,9 +466,17 @@ public class LobbyListener implements Listener {
         // Debug info for admins
         if (player.hasPermission("lobby.zone")) {
             if (zone != null) {
-                player.sendMessage("§7[DEBUG] Block placed in zone: " + zone.getName() + ", allow-block-placement: " + zone.isAllowBlockPlacement());
+                player.sendMessage("§7[DEBUG] Block at Y=" + blockCenter.getY() + " in zone: " + zone.getName() + ", Y-bounds: [" + zone.getMinY() + "-" + zone.getMaxY() + "], allow-block-placement: " + zone.isAllowBlockPlacement());
+                player.sendMessage("§7[DEBUG] Zone corners: " + zone.getCorners().size() + ", world: " + zone.getWorldName());
             } else {
-                player.sendMessage("§7[DEBUG] Block not in any zone");
+                player.sendMessage("§7[DEBUG] Block at Y=" + blockCenter.getY() + " not in any zone - allowing placement");
+                // Check all zones for debugging
+                for (Zone z : zoneManager.getAllZones()) {
+                    boolean contains = z.containsPoint(loc.getWorld().getName(), blockCenter.getX(), blockCenter.getY(), blockCenter.getZ());
+                    if (contains) {
+                        player.sendMessage("§7[DEBUG] Actually in zone " + z.getName() + " but getZoneAt didn't find it!");
+                    }
+                }
             }
         }
 
@@ -473,35 +484,47 @@ public class LobbyListener implements Listener {
             // Block is inside a zone
             if (!zone.isAllowBlockPlacement()) {
                 event.setCancelled(true);
+                plugin.getLogger().info("[BLOCK PLACE] CANCELLED - Player " + player.getName() + " cannot place blocks in zone " + zone.getName() + " (allow-block-placement=false)");
                 player.sendMessage("§cYou can't place blocks in this zone!");
                 return;
             }
             // Zone allows block placement, continue
-        }
-
-        // Not inside any zone OR zone allows placement
-        // Only lobby blocks are allowed for non-build-mode players
-        if (!isLobbyBlock(item)) {
-            event.setCancelled(true);
-            player.sendMessage("§cYou can only place Lobby Blocks!");
-            return;
-        }
-
-        // Lobby block special handling
-        scheduleLobbyBlock(loc);
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            ItemStack slot4 = player.getInventory().getItem(4);
-            if (slot4 != null && isLobbyBlock(slot4)) {
-                slot4.setAmount(64);
-            } else {
-                ItemStack fresh = new ItemStack(Material.SANDSTONE, 64);
-                ItemMeta meta = fresh.getItemMeta();
-                meta.setDisplayName("§cLobby Blocks");
-                fresh.setItemMeta(meta);
-                player.getInventory().setItem(4, fresh);
+            plugin.getLogger().info("[BLOCK PLACE] Zone " + zone.getName() + " allows block placement");
+        } else {
+            // Not in any zone: only lobby blocks allowed
+            plugin.getLogger().info("[BLOCK PLACE] Not in any zone - checking if lobby block");
+            if (!isLobbyBlock(item)) {
+                event.setCancelled(true);
+                plugin.getLogger().info("[BLOCK PLACE] CANCELLED - Player " + player.getName() + " tried to place non-lobby block outside zone");
+                player.sendMessage("§cYou can only place Lobby Blocks outside of zones!");
+                return;
             }
-            player.updateInventory();
-        });
+        }
+
+        // At this point:
+        // - Either we're in a zone with allow-block-placement: true (any block allowed)
+        // - Or we're not in any zone and the block is a lobby block
+        // Only handle lobby blocks specially (auto-removal and refill)
+        if (isLobbyBlock(item)) {
+            plugin.getLogger().info("[BLOCK PLACE] Lobby block placed, scheduling removal");
+            // Lobby block special handling
+            scheduleLobbyBlock(loc);
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                ItemStack slot4 = player.getInventory().getItem(4);
+                if (slot4 != null && isLobbyBlock(slot4)) {
+                    slot4.setAmount(64);
+                } else {
+                    ItemStack fresh = new ItemStack(Material.SANDSTONE, 64);
+                    ItemMeta meta = fresh.getItemMeta();
+                    meta.setDisplayName("§cLobby Blocks");
+                    fresh.setItemMeta(meta);
+                    player.getInventory().setItem(4, fresh);
+                }
+                player.updateInventory();
+            });
+        } else {
+            plugin.getLogger().info("[BLOCK PLACE] Non-lobby block allowed (in zone with allow-block-placement: true)");
+        }
     }
 
     // =========================================================================
@@ -520,23 +543,8 @@ public class LobbyListener implements Listener {
         // Zone Wand is handled entirely by ZoneListener.
         if (ZoneManager.isWand(item) && player.hasPermission("lobby.zone")) return;
 
-        // Allow lobby block placement but prevent interaction with clicked block
-        if (item != null && isLobbyBlock(item) && action == Action.RIGHT_CLICK_BLOCK) {
-            // Deny interaction with the clicked block, but allow block placement
-            event.setUseInteractedBlock(Event.Result.DENY);
-            return;
-        }
-
-        // Cancel all other block interactions (doors, trapdoors, noteblocks, etc.)
-        if ((action == Action.RIGHT_CLICK_BLOCK || action == Action.LEFT_CLICK_BLOCK)
-                && clicked != null) {
-            event.setCancelled(true);
-            event.setUseInteractedBlock(Event.Result.DENY);
-        }
-
-        if (item == null) return;
-
-        if (isLobbyItem(item)) {
+        // Handle lobby items first
+        if (item != null && isLobbyItem(item)) {
             event.setCancelled(true);
             if (!action.toString().contains("RIGHT")) return;
 
@@ -579,7 +587,27 @@ public class LobbyListener implements Listener {
             return;
         }
 
-        event.setCancelled(true);
+        // Special handling for lobby blocks: allow placement but prevent interaction with clicked block
+        if (item != null && isLobbyBlock(item) && action == Action.RIGHT_CLICK_BLOCK) {
+            // Deny interaction with the clicked block, but allow block placement
+            event.setUseInteractedBlock(Event.Result.DENY);
+            return;
+        }
+
+        // If player is holding a placeable block and right-clicking, allow block placement
+        if (item != null && action == Action.RIGHT_CLICK_BLOCK && isBlockItem(item.getType())) {
+            // Allow block placement - onBlockPlace will handle the actual placement logic
+            // Don't cancel the event, otherwise BlockPlaceEvent won't fire
+            plugin.getLogger().info("[INTERACT] Allowing block placement for " + player.getName() + " with " + item.getType());
+            return;
+        }
+
+        // For all other interactions with blocks, cancel them
+        if (clicked != null && (action == Action.RIGHT_CLICK_BLOCK || action == Action.LEFT_CLICK_BLOCK)) {
+            event.setCancelled(true);
+            event.setUseInteractedBlock(Event.Result.DENY);
+            plugin.getLogger().info("[INTERACT] Cancelled interaction for " + player.getName() + " with " + clicked.getType());
+        }
     }
 
     // =========================================================================
@@ -829,5 +857,105 @@ public class LobbyListener implements Listener {
 
     private boolean nameEquals(ItemStack item, String expected) {
         return item.hasItemMeta() && expected.equals(item.getItemMeta().getDisplayName());
+    }
+
+    /**
+     * Check if a material is a placeable block (not a tool, weapon, food, etc.)
+     * In 1.8.8, Material.isBlock() doesn't exist, so we use a manual check.
+     */
+    private boolean isBlockItem(Material type) {
+        if (type == null || type == Material.AIR) {
+            return false;
+        }
+
+        // List of materials that are definitely NOT blocks (tools, weapons, food, etc.)
+        // This is not exhaustive but covers common cases
+        switch (type) {
+            // Tools
+            case WOOD_SWORD:
+            case STONE_SWORD:
+            case IRON_SWORD:
+            case GOLD_SWORD:
+            case DIAMOND_SWORD:
+            case WOOD_SPADE:
+            case STONE_SPADE:
+            case IRON_SPADE:
+            case GOLD_SPADE:
+            case DIAMOND_SPADE:
+            case WOOD_PICKAXE:
+            case STONE_PICKAXE:
+            case IRON_PICKAXE:
+            case GOLD_PICKAXE:
+            case DIAMOND_PICKAXE:
+            case WOOD_AXE:
+            case STONE_AXE:
+            case IRON_AXE:
+            case GOLD_AXE:
+            case DIAMOND_AXE:
+            // Weapons
+            case BOW:
+            case ARROW:
+            // Food
+            case APPLE:
+            case GOLDEN_APPLE:
+            case BREAD:
+            case COOKED_BEEF:
+            case COOKED_CHICKEN:
+            case COOKED_FISH:
+            case COOKED_MUTTON:
+            case COOKED_RABBIT:
+            case COOKED_PORK:
+            // Miscellaneous
+            case COMPASS:
+            case WATCH:
+            case MAP:
+            case FISHING_ROD:
+            case FLINT_AND_STEEL:
+            case BUCKET:
+            case WATER_BUCKET:
+            case LAVA_BUCKET:
+            case MILK_BUCKET:
+            case MINECART:
+            case BOAT:
+            case SADDLE:
+            case LEASH:
+            case NAME_TAG:
+            // Armor
+            case LEATHER_HELMET:
+            case LEATHER_CHESTPLATE:
+            case LEATHER_LEGGINGS:
+            case LEATHER_BOOTS:
+            case IRON_HELMET:
+            case IRON_CHESTPLATE:
+            case IRON_LEGGINGS:
+            case IRON_BOOTS:
+            case GOLD_HELMET:
+            case GOLD_CHESTPLATE:
+            case GOLD_LEGGINGS:
+            case GOLD_BOOTS:
+            case DIAMOND_HELMET:
+            case DIAMOND_CHESTPLATE:
+            case DIAMOND_LEGGINGS:
+            case DIAMOND_BOOTS:
+            case CHAINMAIL_HELMET:
+            case CHAINMAIL_CHESTPLATE:
+            case CHAINMAIL_LEGGINGS:
+            case CHAINMAIL_BOOTS:
+            // Special items (not blocks)
+            case ENDER_PEARL:
+            case EYE_OF_ENDER:
+            case GOLD_INGOT:
+            case IRON_INGOT:
+            case DIAMOND:
+            case EMERALD:
+            case REDSTONE:
+            case COAL:
+            case INK_SACK:
+            case SKULL_ITEM:
+                return false;
+            default:
+                // Assume it's a block
+                return true;
+        }
     }
 }
