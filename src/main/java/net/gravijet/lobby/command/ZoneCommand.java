@@ -77,13 +77,14 @@ public final class ZoneCommand implements CommandExecutor {
 
         // Subcommands that can be used by console or players
         switch (subCommand) {
-            case "delete":     handleDelete(sender, args);        break;
-            case "list":       handleList(sender);                break;
-            case "info":       handleInfo(sender, args);          break;
-            case "setperm":    handleSetPerm(sender, args);       break;
-            case "clearperm":  handleClearPerm(sender, args);     break;
-            case "setmessage": handleSetMessage(sender, args);    break;
-            default:           sendUsage(sender);                 break;
+            case "delete":        handleDelete(sender, args);        break;
+            case "list":          handleList(sender);                break;
+            case "info":          handleInfo(sender, args);          break;
+            case "setperm":       handleSetPerm(sender, args);       break;
+            case "clearperm":     handleClearPerm(sender, args);     break;
+            case "setmessage":    handleSetMessage(sender, args);    break;
+            case "setblockplace": handleSetBlockPlace(sender, args); break;
+            default:               sendUsage(sender);                 break;
         }
         return true;
     }
@@ -339,6 +340,7 @@ public final class ZoneCommand implements CommandExecutor {
         } else {
             sender.sendMessage("§7Permission: §anone (open to all)");
         }
+        sender.sendMessage("§7Block placement: §f" + (zone.isAllowBlockPlacement() ? "§aallowed" : "§cdenied"));
     }
 
     /**
@@ -402,6 +404,33 @@ public final class ZoneCommand implements CommandExecutor {
         }
     }
 
+    /**
+     * /zone setblockplace &lt;name&gt; &lt;true|false&gt;
+     * Sets whether block placement is allowed in the named zone for non-build-mode players.
+     */
+    private void handleSetBlockPlace(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage("§cUsage: /zone setblockplace <name> <true|false>");
+            return;
+        }
+        String name = args[1];
+        String value = args[2].toLowerCase();
+        boolean allow;
+        if (value.equals("true") || value.equals("yes") || value.equals("1")) {
+            allow = true;
+        } else if (value.equals("false") || value.equals("no") || value.equals("0")) {
+            allow = false;
+        } else {
+            sender.sendMessage("§cValue must be true or false.");
+            return;
+        }
+        if (zoneManager.setZoneAllowBlockPlacement(name, allow)) {
+            sender.sendMessage("§aZone §f'" + name + "' §ablock placement set to: §f" + allow);
+        } else {
+            sender.sendMessage("§cNo zone named §f'" + name + "' §cfound.");
+        }
+    }
+
     // =========================================================================
     // Usage
     // =========================================================================
@@ -418,5 +447,6 @@ public final class ZoneCommand implements CommandExecutor {
         sender.sendMessage("§4\u25cf §c/zone setperm <name> <permission> §7\u00bb §fRestrict zone to a permission");
         sender.sendMessage("§4\u25cf §c/zone clearperm <name> §7\u00bb §fRemove permission restriction");
         sender.sendMessage("§4\u25cf §c/zone setmessage <name> <msg...> §7\u00bb §fSet deny message (\\n for new line)");
+        sender.sendMessage("§4\u25cf §c/zone setblockplace <name> <true|false> §7\u00bb §fAllow or deny block placement in zone");
     }
 }
