@@ -211,13 +211,18 @@ public final class ZoneCommand implements CommandExecutor {
     }
 
     /**
-     * /zone jumppad <name> <strength> [minY] [maxY]
-     * Converts the player's current session into a jump pad that launches players upward.
+     * /zone jumppad <name> <strength> [minY maxY] [dx dy dz]
+     * Converts the player's current session into a jump pad.
+     * Direction defaults to upward (0,1,0). Cooldown defaults to 1000 ms.
      */
     private void handleJumpPad(Player player, String[] args) {
         if (args.length < 3) {
-            player.sendMessage("§cUsage: /zone jumppad <name> <strength> [minY] [maxY]");
-            player.sendMessage("§7Strength is a multiplier (e.g., 1.5). Direction is always upward.");
+            player.sendMessage("§cUsage: /zone jumppad <name> <strength> [minY maxY] [dx dy dz]");
+            player.sendMessage("§7Strength is a multiplier (e.g., 1.5). Direction defaults to upward.");
+            player.sendMessage("§7Examples:");
+            player.sendMessage("§7  /zone jumppad launch 1.5");
+            player.sendMessage("§7  /zone jumppad launch 1.5 0 256");
+            player.sendMessage("§7  /zone jumppad launch 1.5 0 256 0 1 0");
             return;
         }
 
@@ -246,10 +251,17 @@ public final class ZoneCommand implements CommandExecutor {
             return;
         }
 
-        // Parse optional Y bounds
+        // Default values
         int minY = 0;
         int maxY = 256;
-        if (args.length >= 5) {
+        double dx = 0.0;
+        double dy = 1.0;
+        double dz = 0.0;
+        long cooldown = 1000L;
+
+        // Parse optional parameters
+        if (args.length == 5) {
+            // name strength minY maxY
             try {
                 minY = Integer.parseInt(args[3]);
                 maxY = Integer.parseInt(args[4]);
@@ -257,12 +269,28 @@ public final class ZoneCommand implements CommandExecutor {
                 player.sendMessage("§cminY and maxY must be integers.");
                 return;
             }
-            if (minY > maxY) {
-                player.sendMessage("§cminY (" + minY + ") must be <= maxY (" + maxY + ").");
+        } else if (args.length == 8) {
+            // name strength minY maxY dx dy dz
+            try {
+                minY = Integer.parseInt(args[3]);
+                maxY = Integer.parseInt(args[4]);
+                dx = Double.parseDouble(args[5]);
+                dy = Double.parseDouble(args[6]);
+                dz = Double.parseDouble(args[7]);
+            } catch (NumberFormatException e) {
+                player.sendMessage("§cInvalid number format.");
                 return;
             }
-        } else if (args.length == 4) {
-            player.sendMessage("§cProvide both minY and maxY, or neither.");
+        } else if (args.length == 3) {
+            // only name strength, keep defaults
+        } else {
+            player.sendMessage("§cInvalid number of arguments.");
+            player.sendMessage("§cUsage: /zone jumppad <name> <strength> [minY maxY] [dx dy dz]");
+            return;
+        }
+
+        if (minY > maxY) {
+            player.sendMessage("§cminY (" + minY + ") must be <= maxY (" + maxY + ").");
             return;
         }
 
@@ -272,10 +300,10 @@ public final class ZoneCommand implements CommandExecutor {
                 player.sendMessage("§cJump pad system not available.");
                 return;
             }
-            JumpPad pad = jumpPadManager.saveJumpPad(name, session, minY, maxY, strength, 0.0, 1.0, 0.0, 1000L);
+            JumpPad pad = jumpPadManager.saveJumpPad(name, session, minY, maxY, strength, dx, dy, dz, cooldown);
             zoneManager.clearSession(player.getUniqueId());
-            player.sendMessage("§aJump pad §f'" + pad.getName() + "' §asaved with strength §f" + strength + "§a.");
-            player.sendMessage("§7Direction: upward, Cooldown: 1000 ms");
+            player.sendMessage("§aJump pad §f'" + pad.getName() + "' §asaved.");
+            player.sendMessage("§7Strength: " + strength + ", Direction: (" + dx + "," + dy + "," + dz + "), Cooldown: " + cooldown + " ms");
         } catch (IllegalArgumentException e) {
             player.sendMessage("§c" + e.getMessage());
         }
@@ -381,6 +409,7 @@ public final class ZoneCommand implements CommandExecutor {
     private void sendUsage(CommandSender sender) {
         sender.sendMessage("§c§lGraviJet §7\u00bb §f§lZone §8- §7Commands");
         sender.sendMessage("§4\u25cf §c/zone wand §7\u00bb §fGet the Zone Wand");
+        sender.sendMessage("§4\u25cf §c/zone jumppad <name> <strength> [minY maxY] [dx dy dz] §7\u00bb §fCreate a jump pad");
         sender.sendMessage("§4\u25cf §c/zone save <name> [minY maxY] §7\u00bb §fSave selection as zone");
         sender.sendMessage("§4\u25cf §c/zone delete <name> §7\u00bb §fDelete a zone");
         sender.sendMessage("§4\u25cf §c/zone list §7\u00bb §fList all zones");

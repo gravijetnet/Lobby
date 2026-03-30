@@ -105,7 +105,7 @@ public class LobbyListener implements Listener {
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (plugin.isInBuildMode(player)) continue;
 
-            Zone restricted = zoneManager.getRestrictedZoneAt(player, player.getLocation());
+            Zone restricted = zoneManager.getDeniedZoneAt(player, player.getLocation());
             if (restricted == null) continue;
 
             // Send deny message with throttle so we don't spam on every tick.
@@ -334,7 +334,6 @@ public class LobbyListener implements Listener {
             case WOOD_STEP:
             case DOUBLE_STEP:
             case WOOD_DOUBLE_STEP:
-            case STAIRS:
             case BIRCH_WOOD_STAIRS:
             case SPRUCE_WOOD_STAIRS:
             case JUNGLE_WOOD_STAIRS:
@@ -679,7 +678,7 @@ public class LobbyListener implements Listener {
         // Only runs when the player physically moved to a new block.
         if (plugin.isInBuildMode(player)) return;
 
-        Zone restricted = zoneManager.getRestrictedZoneAt(player, to);
+        Zone restricted = zoneManager.getDeniedZoneAt(player, to);
         if (restricted == null) return;
 
         // Cancel movement: player is rubber-banded back to `from`.

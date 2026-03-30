@@ -5,6 +5,7 @@ import net.gravijet.lobby.command.FlyCommand;
 import net.gravijet.lobby.command.SetSpawnCommand;
 import net.gravijet.lobby.command.SpawnCommand;
 import net.gravijet.lobby.command.ZoneCommand;
+import net.gravijet.lobby.command.ReloadCommand;
 import net.gravijet.lobby.listener.LobbyListener;
 import net.gravijet.lobby.selector.ServerSelectorManager;
 import net.gravijet.lobby.zone.ZoneListener;
@@ -77,6 +78,7 @@ public class Main extends JavaPlugin {
         getCommand("spawn").setExecutor(new SpawnCommand(this));
         getCommand("fly").setExecutor(new FlyCommand(this));
         getCommand("zone").setExecutor(new ZoneCommand(this, zoneManager));
+        getCommand("lobbyreload").setExecutor(new ReloadCommand(this));
 
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             hasPlaceholderAPI = true;
@@ -464,6 +466,61 @@ public class Main extends JavaPlugin {
     public ServerSelectorManager getServerSelectorManager() { return serverSelectorManager; }
     public ZoneManager           getZoneManager()           { return zoneManager; }
     public JumpPadManager        getJumpPadManager()       { return jumpPadManager; }
+
+    // -------------------------------------------------------------------------
+    // Configuration reload
+    // -------------------------------------------------------------------------
+
+    /**
+     * Reloads the plugin configuration from config.yml and updates all managers.
+     * This should be called when the config file has been modified externally.
+     */
+    public void reloadPluginConfig() {
+        // Reload the config file
+        reloadConfig();
+
+        // Update server selector configuration
+        serverSelectorManager.loadConfig();
+
+        // Reload zones and restart particle task
+        zoneManager.stopParticleTask();
+        zoneManager.loadZones();
+        zoneManager.startParticleTask();
+
+        // Reload jump pads
+        jumpPadManager.loadJumpPads();
+
+        // Reapply world settings
+        for (World world : Bukkit.getWorlds()) {
+            setupWorld(world);
+        }
+
+        // Re-check for PlaceholderAPI and PhoenixAPI
+        hasPlaceholderAPI = Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null;
+        hasPhoenixAPI = Bukkit.getPluginManager().getPlugin("PhoenixAPI") != null;
+
+        if (hasPlaceholderAPI) {
+            getLogger().info("PlaceholderAPI found — placeholder support enabled.");
+        } else {
+            getLogger().warning("PlaceholderAPI not found — placeholders will not resolve.");
+        }
+
+        if (hasPhoenixAPI) {
+            getLogger().info("PhoenixAPI found — rank support enabled.");
+        } else {
+            getLogger().warning("PhoenixAPI not found — rank prefixes will not resolve.");
+        }
+
+        // Update visibility for all online players (permissions may have changed)
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            updatePlayerVisibility(player);
+            updateVisibilityItem(player);
+            updateScoreboard(player);
+            updateTablist(player);
+        }
+
+        getLogger().info("Configuration reloaded successfully!");
+    }
 
     // -------------------------------------------------------------------------
     // Placeholder helpers

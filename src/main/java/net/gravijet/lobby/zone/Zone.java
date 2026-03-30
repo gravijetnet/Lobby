@@ -89,10 +89,21 @@ public final class Zone {
     public boolean isRestricted() { return requiredPermission != null && !requiredPermission.isEmpty(); }
 
     /**
+     * Returns {@code true} if the player is allowed to enter this zone.
+     * Always returns {@code true} when the zone is unrestricted.
+     */
+    public boolean canEnter(Player player) {
+        if (!isRestricted()) return true;
+        return player.hasPermission(requiredPermission);
+    }
+
+    /**
      * Returns {@code true} if the given player does NOT have the required
      * permission to enter this zone.  Always returns {@code false} when the
      * zone is unrestricted.
+     * @deprecated Use {@link #canEnter(Player)} instead
      */
+    @Deprecated
     public boolean isRestrictedFor(Player player) {
         if (!isRestricted()) return false;
         return !player.hasPermission(requiredPermission);

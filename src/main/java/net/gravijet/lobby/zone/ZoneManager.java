@@ -206,8 +206,22 @@ public final class ZoneManager {
      *
      * <p>Build-mode players and players with {@code lobby.zone} permission bypass
      * all restrictions so admins can inspect and set up zones freely.</p>
+     *
+     * @deprecated Use {@link #getDeniedZoneAt(Player, Location)} for clearer semantics.
      */
+    @Deprecated
     public Zone getRestrictedZoneAt(Player player, Location loc) {
+        return getDeniedZoneAt(player, loc);
+    }
+
+    /**
+     * Returns the first zone at {@code loc} that the player is NOT allowed to
+     * enter, or {@code null} if the player may be there.
+     *
+     * <p>Build-mode players and players with {@code lobby.zone} permission bypass
+     * all restrictions so admins can inspect and set up zones freely.</p>
+     */
+    public Zone getDeniedZoneAt(Player player, Location loc) {
         // Admins are never blocked.
         if (plugin.isInBuildMode(player))           return null;
         if (player.hasPermission("lobby.zone"))     return null;
@@ -218,7 +232,23 @@ public final class ZoneManager {
         for (Zone zone : zones.values()) {
             if (!zone.isRestricted()) continue;
             if (zone.containsPoint(worldName, loc.getX(), loc.getY(), loc.getZ())
-                    && zone.isRestrictedFor(player)) {
+                    && !zone.canEnter(player)) {
+                return zone;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the first zone at the given location, regardless of access restrictions.
+     * Useful for checking if a location is inside any zone.
+     */
+    public Zone getZoneAt(Location loc) {
+        String worldName = loc.getWorld() != null ? loc.getWorld().getName() : null;
+        if (worldName == null) return null;
+
+        for (Zone zone : zones.values()) {
+            if (zone.containsPoint(worldName, loc.getX(), loc.getY(), loc.getZ())) {
                 return zone;
             }
         }
