@@ -1,12 +1,6 @@
 package net.gravijet.lobby;
 
-import net.gravijet.lobby.command.BuildCommand;
-import net.gravijet.lobby.command.FlyCommand;
-import net.gravijet.lobby.command.SetSpawnCommand;
-import net.gravijet.lobby.command.SpawnCommand;
-import net.gravijet.lobby.command.ZoneCommand;
-import net.gravijet.lobby.command.ReloadCommand;
-import net.gravijet.lobby.command.JumpPadCommand;
+import net.gravijet.lobby.command.*;
 import net.gravijet.lobby.listener.LobbyListener;
 import net.gravijet.lobby.selector.ServerSelectorManager;
 import net.gravijet.lobby.zone.ZoneListener;
@@ -44,7 +38,6 @@ public class Main extends JavaPlugin {
     private ScoreboardManager    scoreboardManager;
     private ServerSelectorManager serverSelectorManager;
         private ZoneManager           zoneManager;
-    // private JumpPadManager        jumpPadManager;
     private boolean hasPlaceholderAPI = false;
     private boolean hasPhoenixAPI     = false;
 
@@ -63,9 +56,6 @@ public class Main extends JavaPlugin {
         zoneManager.loadZones();
         zoneManager.startParticleTask();
 
-        // jumpPadManager = new JumpPadManager(this);
-        // jumpPadManager.loadJumpPads();
-
         getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
 
         getServer().getPluginManager().registerEvents(new LobbyListener(this, zoneManager), this);
@@ -77,11 +67,6 @@ public class Main extends JavaPlugin {
         getCommand("fly").setExecutor(new FlyCommand(this));
         getCommand("zone").setExecutor(new ZoneCommand(this, zoneManager));
         getCommand("lobbyreload").setExecutor(new ReloadCommand(this));
-
-        // Register jump pad command and listener
-        JumpPadCommand jumpPadCommand = new JumpPadCommand(this);
-        getCommand("jumppad").setExecutor(jumpPadCommand);
-        getServer().getPluginManager().registerEvents(jumpPadCommand, this);
 
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             hasPlaceholderAPI = true;
@@ -112,7 +97,6 @@ public class Main extends JavaPlugin {
     @Override
     public void onDisable() {
         if (zoneManager != null) zoneManager.stopParticleTask();
-        // if (jumpPadManager != null) jumpPadManager.saveAll();
         getServer().getMessenger().unregisterOutgoingPluginChannel(this);
     }
 
@@ -468,7 +452,6 @@ public class Main extends JavaPlugin {
 
     public ServerSelectorManager getServerSelectorManager() { return serverSelectorManager; }
     public ZoneManager           getZoneManager()           { return zoneManager; }
-    // public JumpPadManager        getJumpPadManager()       { return jumpPadManager; }
 
     // -------------------------------------------------------------------------
     // Configuration reload
@@ -490,8 +473,7 @@ public class Main extends JavaPlugin {
         zoneManager.loadZones();
         zoneManager.startParticleTask();
 
-        // Reload jump pads
-        // jumpPadManager.loadJumpPads();
+
 
         // Reapply world settings
         for (World world : Bukkit.getWorlds()) {
