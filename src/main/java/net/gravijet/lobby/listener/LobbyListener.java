@@ -68,7 +68,8 @@ public class LobbyListener implements Listener {
         Bukkit.getScheduler().runTaskTimer(plugin, this::tickHeightLimit,  1L,  4L);
         // Backup access check: catches players who got inside a restricted zone
         // via teleportation, spawn, or any means other than walking.
-        Bukkit.getScheduler().runTaskTimer(plugin, this::tickAccessCheck, 20L, 10L);
+        // Temporarily disabled to debug zone access issues
+        // Bukkit.getScheduler().runTaskTimer(plugin, this::tickAccessCheck, 20L, 10L);
     }
 
     // =========================================================================
@@ -445,14 +446,29 @@ public class LobbyListener implements Listener {
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         Player player = event.getPlayer();
-        if (plugin.isInBuildMode(player)) return;
+
+        // Build-mode players can place any block anywhere
+        if (plugin.isInBuildMode(player)) {
+            return;
+        }
 
         ItemStack item = event.getItemInHand();
         Block placed = event.getBlockPlaced();
         Location loc = placed.getLocation();
 
-        // Check if block is inside any zone
-        Zone zone = zoneManager.getZoneAt(loc);
+        // Check if block is inside any zone (use block center for accurate checking)
+        Location blockCenter = loc.clone().add(0.5, 0.5, 0.5);
+        Zone zone = zoneManager.getZoneAt(blockCenter);
+
+        // Debug info for admins
+        if (player.hasPermission("lobby.zone")) {
+            if (zone != null) {
+                player.sendMessage("§7[DEBUG] Block placed in zone: " + zone.getName() + ", allow-block-placement: " + zone.isAllowBlockPlacement());
+            } else {
+                player.sendMessage("§7[DEBUG] Block not in any zone");
+            }
+        }
+
         if (zone != null) {
             // Block is inside a zone
             if (!zone.isAllowBlockPlacement()) {
@@ -462,11 +478,12 @@ public class LobbyListener implements Listener {
             }
             // Zone allows block placement, continue
         }
-        // Not inside a zone OR zone allows placement
 
+        // Not inside any zone OR zone allows placement
         // Only lobby blocks are allowed for non-build-mode players
         if (!isLobbyBlock(item)) {
             event.setCancelled(true);
+            player.sendMessage("§cYou can only place Lobby Blocks!");
             return;
         }
 
@@ -688,7 +705,21 @@ public class LobbyListener implements Listener {
         // ── 3. VIP-zone border check ──────────────────────────────────────────
         // Only runs when the player physically moved to a new block.
         if (plugin.isInBuildMode(player)) return;
-        if (player.hasPermission("lobby.zone")) return; // Admins can always enter
+
+        // Debug info for admins
+        boolean isAdmin = player.hasPermission("lobby.zone");
+        if (isAdmin) {
+            // Show zone info for admins
+            Zone zoneAt = zoneManager.getZoneAt(to);
+            if (zoneAt != null) {
+                player.sendMessage("§7[DEBUG] Zone: " + zoneAt.getName() + ", restricted: " + zoneAt.isRestricted() + ", canEnter: " + zoneAt.canEnter(player));
+                if (zoneAt.isRestricted()) {
+                    player.sendMessage("§7[DEBUG] Permission: " + zoneAt.getRequiredPermission() + ", hasPermission: " + player.hasPermission(zoneAt.getRequiredPermission()));
+                }
+            }
+            // Admins can always enter
+            return;
+        }
 
         Zone restricted = zoneManager.getDeniedZoneAt(player, to);
         if (restricted == null) return;

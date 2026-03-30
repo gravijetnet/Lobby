@@ -1,11 +1,7 @@
 package net.gravijet.lobby.command;
 
 import net.gravijet.lobby.Main;
-import net.gravijet.lobby.zone.Zone;
-import net.gravijet.lobby.zone.ZoneManager;
-import net.gravijet.lobby.zone.JumpPadManager;
-import net.gravijet.lobby.zone.JumpPad;
-import net.gravijet.lobby.zone.ZoneSelectionSession;
+import net.gravijet.lobby.zone.*;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -38,6 +34,7 @@ public final class ZoneCommand implements CommandExecutor {
     public ZoneCommand(Main plugin, ZoneManager zoneManager) {
         this.plugin      = plugin;
         this.zoneManager = zoneManager;
+
     }
 
     // =========================================================================
@@ -60,7 +57,7 @@ public final class ZoneCommand implements CommandExecutor {
         String subCommand = args[0].toLowerCase();
 
         // Subcommands that require a player (give, save, clear)
-        if (subCommand.equals("wand") || subCommand.equals("save") || subCommand.equals("clear") || subCommand.equals("jumppad")) {
+        if (subCommand.equals("wand") || subCommand.equals("save") || subCommand.equals("clear")) {
             if (!(sender instanceof Player)) {
                 sender.sendMessage("§cThis subcommand can only be used by players.");
                 return true;
@@ -70,7 +67,6 @@ public final class ZoneCommand implements CommandExecutor {
                 case "wand":       handleGive(player);                break;
                 case "save":       handleSave(player, args);          break;
                 case "clear":      handleClear(player);               break;
-                case "jumppad":   handleJumpPad(player, args);       break;
             }
             return true;
         }
@@ -211,104 +207,7 @@ public final class ZoneCommand implements CommandExecutor {
         player.sendMessage("§aSelection cleared.");
     }
 
-    /**
-     * /zone jumppad <name> <strength> [minY maxY] [dx dy dz]
-     * Converts the player's current session into a jump pad.
-     * Direction defaults to upward (0,1,0). Cooldown defaults to 1000 ms.
-     */
-    private void handleJumpPad(Player player, String[] args) {
-        if (args.length < 3) {
-            player.sendMessage("§cUsage: /zone jumppad <name> <strength> [minY maxY] [dx dy dz]");
-            player.sendMessage("§7Strength is a multiplier (e.g., 1.5). Direction defaults to upward.");
-            player.sendMessage("§7Examples:");
-            player.sendMessage("§7  /zone jumppad launch 1.5");
-            player.sendMessage("§7  /zone jumppad launch 1.5 0 256");
-            player.sendMessage("§7  /zone jumppad launch 1.5 0 256 0 1 0");
-            return;
-        }
 
-        String name = args[1];
-        if (name.contains(" ") || name.isEmpty()) {
-            player.sendMessage("§cJump pad name must not contain spaces.");
-            return;
-        }
-
-        double strength;
-        try {
-            strength = Double.parseDouble(args[2]);
-        } catch (NumberFormatException e) {
-            player.sendMessage("§cStrength must be a number.");
-            return;
-        }
-        if (strength <= 0) {
-            player.sendMessage("§cStrength must be positive.");
-            return;
-        }
-
-        ZoneSelectionSession session = zoneManager.getSession(player.getUniqueId());
-        if (session == null || !session.isComplete()) {
-            player.sendMessage("§cYou need at least 3 corners in your selection!");
-            player.sendMessage("§7Use §e/zone wand §7to get the Zone Wand first.");
-            return;
-        }
-
-        // Default values
-        int minY = 0;
-        int maxY = 256;
-        double dx = 0.0;
-        double dy = 1.0;
-        double dz = 0.0;
-        long cooldown = 1000L;
-
-        // Parse optional parameters
-        if (args.length == 5) {
-            // name strength minY maxY
-            try {
-                minY = Integer.parseInt(args[3]);
-                maxY = Integer.parseInt(args[4]);
-            } catch (NumberFormatException e) {
-                player.sendMessage("§cminY and maxY must be integers.");
-                return;
-            }
-        } else if (args.length == 8) {
-            // name strength minY maxY dx dy dz
-            try {
-                minY = Integer.parseInt(args[3]);
-                maxY = Integer.parseInt(args[4]);
-                dx = Double.parseDouble(args[5]);
-                dy = Double.parseDouble(args[6]);
-                dz = Double.parseDouble(args[7]);
-            } catch (NumberFormatException e) {
-                player.sendMessage("§cInvalid number format.");
-                return;
-            }
-        } else if (args.length == 3) {
-            // only name strength, keep defaults
-        } else {
-            player.sendMessage("§cInvalid number of arguments.");
-            player.sendMessage("§cUsage: /zone jumppad <name> <strength> [minY maxY] [dx dy dz]");
-            return;
-        }
-
-        if (minY > maxY) {
-            player.sendMessage("§cminY (" + minY + ") must be <= maxY (" + maxY + ").");
-            return;
-        }
-
-        try {
-            JumpPadManager jumpPadManager = plugin.getJumpPadManager();
-            if (jumpPadManager == null) {
-                player.sendMessage("§cJump pad system not available.");
-                return;
-            }
-            JumpPad pad = jumpPadManager.saveJumpPad(name, session, minY, maxY, strength, dx, dy, dz, cooldown);
-            zoneManager.clearSession(player.getUniqueId());
-            player.sendMessage("§aJump pad §f'" + pad.getName() + "' §asaved.");
-            player.sendMessage("§7Strength: " + strength + ", Direction: (" + dx + "," + dy + "," + dz + "), Cooldown: " + cooldown + " ms");
-        } catch (IllegalArgumentException e) {
-            player.sendMessage("§c" + e.getMessage());
-        }
-    }
 
     /**
      * /zone info &lt;name&gt;
@@ -438,7 +337,7 @@ public final class ZoneCommand implements CommandExecutor {
     private void sendUsage(CommandSender sender) {
         sender.sendMessage("§c§lGraviJet §7\u00bb §f§lZone §8- §7Commands");
         sender.sendMessage("§4\u25cf §c/zone wand §7\u00bb §fGet the Zone Wand");
-        sender.sendMessage("§4\u25cf §c/zone jumppad <name> <strength> [minY maxY] [dx dy dz] §7\u00bb §fCreate a jump pad");
+
         sender.sendMessage("§4\u25cf §c/zone save <name> [minY maxY] §7\u00bb §fSave selection as zone");
         sender.sendMessage("§4\u25cf §c/zone delete <name> §7\u00bb §fDelete a zone");
         sender.sendMessage("§4\u25cf §c/zone list §7\u00bb §fList all zones");
