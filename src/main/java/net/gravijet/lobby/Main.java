@@ -174,19 +174,19 @@ public class Main extends JavaPlugin {
         String displayName;
         switch (visibility) {
             case "VIP":
-                dyeDamage   = 5;
+                dyeDamage = 5;
                 displayName = "§5Only VIP players are visible";
                 break;
             case "STAFF":
-                dyeDamage   = 14;
+                dyeDamage = 14;
                 displayName = "§6Only Staff is visible";
                 break;
             case "NONE":
-                dyeDamage   = 1;
+                dyeDamage = 1;
                 displayName = "§cNo players are visible";
                 break;
             default:
-                dyeDamage   = 10;
+                dyeDamage = 10;
                 displayName = "§aAll players are visible";
                 break;
         }
@@ -201,18 +201,18 @@ public class Main extends JavaPlugin {
     public void updatePlayerVisibility(Player player) {
         String visibility = getConfig().getString(
                 "players." + player.getUniqueId() + ".visibility", "ALL");
-        String vipPerm   = getConfig().getString("visibility.vip-permission",  "lobby.visibility.vip");
+        String vipPerm = getConfig().getString("visibility.vip-permission", "lobby.visibility.vip");
         String staffPerm = getConfig().getString("visibility.staff-permission", "lobby.visibility.staff");
 
         for (Player online : Bukkit.getOnlinePlayers()) {
             switch (visibility) {
                 case "VIP":
                     if (online.hasPermission(vipPerm)) player.showPlayer(online);
-                    else                                player.hidePlayer(online);
+                    else player.hidePlayer(online);
                     break;
                 case "STAFF":
                     if (online.hasPermission(staffPerm)) player.showPlayer(online);
-                    else                                  player.hidePlayer(online);
+                    else player.hidePlayer(online);
                     break;
                 case "NONE":
                     player.hidePlayer(online);
@@ -229,10 +229,18 @@ public class Main extends JavaPlugin {
                 "players." + player.getUniqueId() + ".visibility", "ALL");
         String next;
         switch (current) {
-            case "ALL":   next = "VIP";   break;
-            case "VIP":   next = "STAFF"; break;
-            case "STAFF": next = "NONE";  break;
-            default:      next = "ALL";   break;
+            case "ALL":
+                next = "VIP";
+                break;
+            case "VIP":
+                next = "STAFF";
+                break;
+            case "STAFF":
+                next = "NONE";
+                break;
+            default:
+                next = "ALL";
+                break;
         }
 
         getConfig().set("players." + player.getUniqueId() + ".visibility", next);
@@ -254,18 +262,26 @@ public class Main extends JavaPlugin {
         objective.setDisplayName("§c§lGravijet.net");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
 
-        objective.getScore("§7§m-------------------").setScore(9);
-        objective.getScore("§8>> §cRank: §6" + getPlaceholder(player, "%rank%")).setScore(8);
-        objective.getScore("§8>> §cPlayers: §6" + getPlaceholder(player, "%players%")).setScore(7);
-        objective.getScore("§8>> §cCoins: §6" + getPlaceholder(player, "%coins%")).setScore(6);
-        objective.getScore("§8>> §cLevel: §6" + getPlaceholder(player, "%level%")).setScore(5);
-        objective.getScore("§8>> §cPlaytime: §6" + getPlaceholder(player, "%playtime%") + "h").setScore(4);
-        objective.getScore("§f ").setScore(3);
-        objective.getScore("§7§ogravijet.net").setScore(2);
-        objective.getScore("§7§o§m-------------------").setScore(1);
+        int playtime = 0;
+        try {
+            playtime = Integer.parseInt(
+                    getPlaceholder(player, "%phoenix_player_playtime_seconds%")) / 3600;
+        } catch (NumberFormatException ignored) {
+        }
 
+        int score = 15;
+        objective.getScore("§7§m-------------------").setScore(score--);
+        objective.getScore("§8» §cRank: §6" + getPlaceholder(player, "%phoenix_player_real_rank%")).setScore(score--);
+        objective.getScore("§8» §cPlayers: §6" + getPlaceholder(player, "%phoenix_server_global_online%")).setScore(score--);
+        objective.getScore("§8» §cCoins: §6" + getPlaceholder(player, "%pxcosmetics_player_coins%")).setScore(score--);
+        objective.getScore("§8» §cLevel: §6" + getPlaceholder(player, "%phoenix_player_level_displayname%")).setScore(score--);
+        objective.getScore("§8» §cPlaytime: §6" + playtime + "h").setScore(score--);
+        objective.getScore("§f ").setScore(score--);
+        objective.getScore("§7§ogravijet.net").setScore(score--);
+        objective.getScore("§7§o§m-------------------").setScore(score--);
         player.setScoreboard(board);
     }
+
 
     public boolean isInBuildMode(Player player) {
         return buildModePlayers.contains(player.getUniqueId());
@@ -295,20 +311,20 @@ public class Main extends JavaPlugin {
         World world = Bukkit.getWorld(worldName);
         if (world == null) return null;
 
-        double x     = getConfig().getDouble("spawn.x");
-        double y     = getConfig().getDouble("spawn.y");
-        double z     = getConfig().getDouble("spawn.z");
-        float  yaw   = (float) getConfig().getDouble("spawn.yaw");
-        float  pitch = (float) getConfig().getDouble("spawn.pitch");
+        double x = getConfig().getDouble("spawn.x");
+        double y = getConfig().getDouble("spawn.y");
+        double z = getConfig().getDouble("spawn.z");
+        float yaw = (float) getConfig().getDouble("spawn.yaw");
+        float pitch = (float) getConfig().getDouble("spawn.pitch");
         return new Location(world, x, y, z, yaw, pitch);
     }
 
     public void setSpawnLocation(Location loc) {
         getConfig().set("spawn.world", loc.getWorld().getName());
-        getConfig().set("spawn.x",     loc.getX());
-        getConfig().set("spawn.y",     loc.getY());
-        getConfig().set("spawn.z",     loc.getZ());
-        getConfig().set("spawn.yaw",   loc.getYaw());
+        getConfig().set("spawn.x", loc.getX());
+        getConfig().set("spawn.y", loc.getY());
+        getConfig().set("spawn.z", loc.getZ());
+        getConfig().set("spawn.yaw", loc.getYaw());
         getConfig().set("spawn.pitch", loc.getPitch());
         saveConfig();
     }
@@ -325,9 +341,17 @@ public class Main extends JavaPlugin {
         }
     }
 
-    public ServerSelectorManager getServerSelectorManager() { return serverSelectorManager; }
-    public ZoneManager           getZoneManager()           { return zoneManager; }
-    public JumppadManager        getJumppadManager()        { return jumppadManager; }
+    public ServerSelectorManager getServerSelectorManager() {
+        return serverSelectorManager;
+    }
+
+    public ZoneManager getZoneManager() {
+        return zoneManager;
+    }
+
+    public JumppadManager getJumppadManager() {
+        return jumppadManager;
+    }
 
     public void reloadPluginConfig() {
         reloadConfig();
