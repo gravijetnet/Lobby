@@ -21,7 +21,7 @@ public class GetSpeedCookieCommand implements CommandExecutor {
 
     public static final long COOLDOWN_MS = 3_600_000L;
 
-    private final Main plugin;
+    private final Main            plugin;
     private final Map<UUID, Long> cooldowns = new HashMap<>();
 
     public GetSpeedCookieCommand(Main plugin) {
@@ -31,7 +31,7 @@ public class GetSpeedCookieCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage("§cNur für Spieler!");
+            sender.sendMessage("§cThis command can only be used by players.");
             return true;
         }
         openMenu((Player) sender);
@@ -39,44 +39,42 @@ public class GetSpeedCookieCommand implements CommandExecutor {
     }
 
     public void openMenu(Player player) {
-        Inventory inv = Bukkit.createInventory(null, 27, "§bSpeed Cookie");
-
+        Inventory inv  = Bukkit.createInventory(null, 27, "§bSpeed Cookie");
         ItemStack pane = new ItemStack(Material.STAINED_GLASS_PANE, 1, (short) 7);
-        ItemMeta paneMeta = pane.getItemMeta();
+        ItemMeta  paneMeta = pane.getItemMeta();
         paneMeta.setDisplayName("§8 ");
         pane.setItemMeta(paneMeta);
         for (int i = 0; i < 27; i++) {
             if (i != 13) inv.setItem(i, pane);
         }
-
         inv.setItem(13, buildMenuCookieItem(player.getUniqueId()));
         player.openInventory(inv);
     }
 
     public void handleCookieClick(Player player) {
-        UUID uuid = player.getUniqueId();
+        UUID uuid      = player.getUniqueId();
         long remaining = getRemainingCooldown(uuid);
         if (remaining > 0) {
-            player.sendMessage("§cDu musst noch §e" + formatTime(remaining) + " §cwarten!");
+            player.sendMessage("§cYou must wait §e" + formatTime(remaining) + "§c more.");
             return;
         }
         cooldowns.put(uuid, System.currentTimeMillis());
         player.getInventory().addItem(buildGiveCookieItem());
         player.closeInventory();
-        player.sendMessage("§aDu hast einen §bSpeed Cookie §aerhalten!");
+        player.sendMessage("§aYou received a §bSpeed Cookie§a!");
     }
 
     public ItemStack buildMenuCookieItem(UUID uuid) {
         ItemStack cookie = new ItemStack(Material.COOKIE);
-        ItemMeta meta = cookie.getItemMeta();
+        ItemMeta  meta   = cookie.getItemMeta();
         meta.setDisplayName("§bSpeed Cookie");
         List<String> lore = new ArrayList<>();
-        lore.add("§7Gibt dir §bSpeed II §7für §b10 Minuten§7!");
+        lore.add("§7Grants §bSpeed II §7for §b10 minutes§7!");
         long remaining = getRemainingCooldown(uuid);
         if (remaining > 0) {
-            lore.add("§cVerfügbar in: §e" + formatTime(remaining));
+            lore.add("§cAvailable in: §e" + formatTime(remaining));
         } else {
-            lore.add("§aKlicke zum Erhalten!");
+            lore.add("§aClick to receive!");
         }
         meta.setLore(lore);
         cookie.setItemMeta(meta);
@@ -85,11 +83,11 @@ public class GetSpeedCookieCommand implements CommandExecutor {
 
     public static ItemStack buildGiveCookieItem() {
         ItemStack cookie = new ItemStack(Material.COOKIE);
-        ItemMeta meta = cookie.getItemMeta();
+        ItemMeta  meta   = cookie.getItemMeta();
         meta.setDisplayName("§bSpeed Cookie");
         List<String> lore = new ArrayList<>();
-        lore.add("§7Gibt dir §bSpeed II §7für §b10 Minuten§7!");
-        lore.add("§7Halte Rechtsklick zum Essen!");
+        lore.add("§7Grants §bSpeed II §7for §b10 minutes§7!");
+        lore.add("§7Right-click to eat!");
         meta.setLore(lore);
         cookie.setItemMeta(meta);
         return cookie;
