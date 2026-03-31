@@ -42,36 +42,23 @@ import java.util.UUID;
 
 public class LobbyListener implements Listener {
 
-    private final Main        plugin;
+    private final Main plugin;
     private final ZoneManager zoneManager;
 
-    // Ender Butt: active pearls and previous location for skip-through detection
-    private final Map<UUID, EnderPearl> enderButtPearls = new HashMap<>();
-    private final Map<UUID, Location>   lastPearlLoc    = new HashMap<>();
-
-    // Lobby block lifecycle: location → {task1 (sandstone→redstone), task2 (redstone→air)}
-    private final Map<Location, int[]> lobbyBlockTasks = new HashMap<>();
-
-    /**
-     * Cooldown for "zone denied" messages so a player isn't spammed.
-     * Maps player UUID → System.currentTimeMillis() of last deny message.
-     * Throttle: 1 500 ms between messages per player.
-     */
-    private final Map<UUID, Long> denyMessageCooldown = new HashMap<>();
+    private final Map<UUID, EnderPearl> enderButtPearls  = new HashMap<>();
+    private final Map<UUID, Location>   lastPearlLoc      = new HashMap<>();
+    private final Map<Location, int[]>  lobbyBlockTasks   = new HashMap<>();
+    private final Map<UUID, Long>       denyMessageCooldown = new HashMap<>();
 
     private static final long DENY_MESSAGE_COOLDOWN_MS = 1_500L;
 
     public LobbyListener(Main plugin, ZoneManager zoneManager) {
         this.plugin      = plugin;
         this.zoneManager = zoneManager;
-        Bukkit.getScheduler().runTaskTimer(plugin, this::tickEnderButt,    1L,  1L);
-        Bukkit.getScheduler().runTaskTimer(plugin, this::tickHeightLimit,  1L,  4L);
+        Bukkit.getScheduler().runTaskTimer(plugin, this::tickEnderButt,   1L,  1L);
+        Bukkit.getScheduler().runTaskTimer(plugin, this::tickHeightLimit, 1L,  4L);
         Bukkit.getScheduler().runTaskTimer(plugin, this::tickAccessCheck, 20L, 10L);
     }
-
-    // =========================================================================
-    // Height limit — backup tick
-    // =========================================================================
 
     private void tickHeightLimit() {
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -90,24 +77,14 @@ public class LobbyListener implements Listener {
         }
     }
 
-    // =========================================================================
-    // VIP-zone access check — backup tick (every 10 ticks = 0.5 s)
-    // =========================================================================
-
-    /**
-     * Catches players who are standing inside a restricted zone without the
-     * required permission (e.g. after a teleport, or on first join).
-     * Teleports them immediately to spawn and sends the zone's deny message.
-     */
     private void tickAccessCheck() {
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (plugin.isInBuildMode(player)) continue;
-            if (player.hasPermission("lobby.zone")) continue; // Admins can always enter
+            if (player.hasPermission("lobby.zone")) continue;
 
             Zone restricted = zoneManager.getDeniedZoneAt(player, player.getLocation());
             if (restricted == null) continue;
 
-            // Send deny message with throttle so we don't spam on every tick.
             sendDenyMessage(player, restricted);
 
             Location spawn = plugin.getSpawnLocation();
@@ -116,10 +93,6 @@ public class LobbyListener implements Listener {
             }
         }
     }
-
-    // =========================================================================
-    // Ender Butt — per-tick physics
-    // =========================================================================
 
     private void tickEnderButt() {
         Iterator<Map.Entry<UUID, EnderPearl>> it = enderButtPearls.entrySet().iterator();
@@ -148,20 +121,14 @@ public class LobbyListener implements Listener {
         }
     }
 
-    // =========================================================================
-    // Join / quit / world change
-    // =========================================================================
-
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-
-        // Always start in Survival — clear any previous build mode first.
         plugin.clearBuildMode(player);
         player.setGameMode(GameMode.SURVIVAL);
 
         for (Player online : Bukkit.getOnlinePlayers()) {
-            player.showPlayer(online); // 1.8: no plugin parameter
+            player.showPlayer(online);
         }
         plugin.setupPlayer(player);
     }
@@ -187,10 +154,6 @@ public class LobbyListener implements Listener {
         plugin.setupWorld(event.getPlayer().getWorld());
     }
 
-    // =========================================================================
-    // Block break
-    // =========================================================================
-
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         if (!plugin.isInBuildMode(event.getPlayer())) {
@@ -198,24 +161,23 @@ public class LobbyListener implements Listener {
         }
     }
 
-    // =========================================================================
-    // Block place
-    // =========================================================================
-
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
         Player player = event.getPlayer();
 
-        if (plugin.isInBuildMode(player)) {
-            return;
-        }
+        if (plugin.isInBuildMode(player)) return;
 
         ItemStack item = event.getItemInHand();
         Block placed = event.getBlockPlaced();
 
         if (isLobbyBlock(item)) {
+            Zone zone = zoneManager.getZoneAt(placed.getLocation());
+            if (zone != null && !zone.isAllowBlockPlacement()) {
+                event.setCancelled(true);
+                return;
+            }
+
             scheduleLobbyBlock(placed.getLocation());
-            // Refill the player's lobby block stack
             Bukkit.getScheduler().runTask(plugin, () -> {
                 ItemStack slot4 = player.getInventory().getItem(4);
                 if (slot4 != null && isLobbyBlock(slot4)) {
@@ -230,37 +192,23 @@ public class LobbyListener implements Listener {
                 player.updateInventory();
             });
         } else {
-            // This case should not be reached due to onInteract, but as a safeguard:
             event.setCancelled(true);
         }
     }
 
-    // =========================================================================
-    // Interactions
-    // =========================================================================
-
     @EventHandler(priority = EventPriority.HIGH)
     public void onInteract(PlayerInteractEvent event) {
-        Player    player  = event.getPlayer();
-        ItemStack item    = event.getItem();
-        Action    action  = event.getAction();
+        Player    player = event.getPlayer();
+        ItemStack item   = event.getItem();
+        Action    action = event.getAction();
 
-        // Builders can do anything.
-        if (plugin.isInBuildMode(player)) {
-            return;
-        }
+        if (plugin.isInBuildMode(player)) return;
 
-        // Zone Wand is handled entirely by ZoneListener.
-        if (ZoneManager.isWand(item) && player.hasPermission("lobby.zone")) {
-            return;
-        }
+        if (ZoneManager.isWand(item) && player.hasPermission("lobby.zone")) return;
 
-        // 1. Handle lobby hotbar items (compass, ender butt, etc.)
         if (item != null && isLobbyItem(item)) {
-            event.setCancelled(true); // Cancel the interaction itself
-            if (!action.toString().contains("RIGHT")) {
-                return;
-            }
+            event.setCancelled(true);
+            if (!action.toString().contains("RIGHT")) return;
 
             if (item.getType() == Material.COMPASS && nameEquals(item, "§cServer Selector")) {
                 plugin.getServerSelectorManager().openServerSelector(player);
@@ -301,25 +249,20 @@ public class LobbyListener implements Listener {
             return;
         }
 
-        // 2. Handle block placement
         if (action == Action.RIGHT_CLICK_BLOCK) {
             if (item != null && isLobbyBlock(item)) {
-                // It's a lobby block. We want to allow placement.
-                // But we want to prevent interacting with the clicked block (e.g. trapdoor).
                 event.setUseInteractedBlock(Event.Result.DENY);
-                // IMPORTANT: Do NOT cancel the event. This allows BlockPlaceEvent to fire.
                 return;
             }
         }
 
-        // 3. For ANY other interaction not handled above, cancel it.
+        if (SpeedCookieListener.isSpeedCookie(item)
+                && (action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK)) {
+            return;
+        }
+
         event.setCancelled(true);
     }
-
-
-    // =========================================================================
-    // Ender Butt projectile hit
-    // =========================================================================
 
     @EventHandler
     public void onProjectileHit(ProjectileHitEvent event) {
@@ -345,10 +288,6 @@ public class LobbyListener implements Listener {
         }
     }
 
-    // =========================================================================
-    // Inventory click
-    // =========================================================================
-
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player)) return;
@@ -363,12 +302,13 @@ public class LobbyListener implements Listener {
             return;
         }
 
+        if (event.getView().getTitle().equals("§bSpeed Cookie")) {
+            event.setCancelled(true);
+            return;
+        }
+
         if (!plugin.isInBuildMode(player)) event.setCancelled(true);
     }
-
-    // =========================================================================
-    // Drop / pickup
-    // =========================================================================
 
     @EventHandler
     public void onDrop(PlayerDropItemEvent event) {
@@ -380,10 +320,6 @@ public class LobbyListener implements Listener {
         if (!plugin.isInBuildMode(event.getPlayer())) event.setCancelled(true);
     }
 
-    // =========================================================================
-    // Damage / food / respawn
-    // =========================================================================
-
     @EventHandler
     public void onDamage(EntityDamageEvent event) {
         if (event.getEntity() instanceof Player) event.setCancelled(true);
@@ -391,7 +327,9 @@ public class LobbyListener implements Listener {
 
     @EventHandler
     public void onFoodChange(FoodLevelChangeEvent event) {
-        event.setCancelled(true);
+        if (event.getEntity() instanceof Player) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler
@@ -401,10 +339,6 @@ public class LobbyListener implements Listener {
         Bukkit.getScheduler().runTaskLater(plugin, () -> plugin.setupPlayer(event.getPlayer()), 1L);
     }
 
-    // =========================================================================
-    // Player movement — height, lower bounds, VIP-zone access
-    // =========================================================================
-
     @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerMove(PlayerMoveEvent event) {
         if (event.getTo() == null) return;
@@ -413,7 +347,6 @@ public class LobbyListener implements Listener {
         Location from   = event.getFrom();
         Location to     = event.getTo();
 
-        // ── 1. Height ceiling ─────────────────────────────────────────────────
         if (to.getY() > 200 && !plugin.isInBuildMode(player)) {
             ejectAndCancelPearl(player);
             event.setCancelled(true);
@@ -422,14 +355,12 @@ public class LobbyListener implements Listener {
             return;
         }
 
-        // ── skip if only head rotation changed ────────────────────────────────
         if (from.getBlockX() == to.getBlockX()
                 && from.getBlockY() == to.getBlockY()
                 && from.getBlockZ() == to.getBlockZ()) {
             return;
         }
 
-        // ── 2. Lower floor ────────────────────────────────────────────────────
         if (to.getY() < -50 && !plugin.isInBuildMode(player)) {
             event.setCancelled(true);
             Location spawn = plugin.getSpawnLocation();
@@ -437,18 +368,13 @@ public class LobbyListener implements Listener {
             return;
         }
 
-        // ── 3. VIP-zone border check ──────────────────────────────────────────
-        if (plugin.isInBuildMode(player) || player.hasPermission("lobby.zone")) {
-            return;
-        }
+        if (plugin.isInBuildMode(player) || player.hasPermission("lobby.zone")) return;
 
         Zone restricted = zoneManager.getDeniedZoneAt(player, to);
         if (restricted == null) return;
 
-        // Cancel movement: player is rubber-banded back to `from`.
         event.setCancelled(true);
 
-        // Apply knockback so the player is visibly "schleudert" away from the border.
         double dx = to.getX() - from.getX();
         double dz = to.getZ() - from.getZ();
         double hLen = Math.sqrt(dx * dx + dz * dz);
@@ -475,10 +401,6 @@ public class LobbyListener implements Listener {
         sendDenyMessage(player, restricted);
     }
 
-    // =========================================================================
-    // Lobby block lifecycle
-    // =========================================================================
-
     private void scheduleLobbyBlock(Location loc) {
         int[] existing = lobbyBlockTasks.remove(loc);
         if (existing != null) {
@@ -499,10 +421,6 @@ public class LobbyListener implements Listener {
 
         lobbyBlockTasks.put(loc, new int[]{ task1, task2 });
     }
-
-    // =========================================================================
-    // Helpers
-    // =========================================================================
 
     private void ejectAndCancelPearl(Player player) {
         if (player.isInsideVehicle()) player.getVehicle().eject();

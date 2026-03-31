@@ -16,19 +16,16 @@ public class BuildCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        // If no arguments, toggle sender's own build mode (must be a player)
         if (args.length == 0) {
             if (!(sender instanceof Player)) {
                 sender.sendMessage("§cUsage: /build <player>");
                 return true;
             }
             Player player = (Player) sender;
-
             if (!player.hasPermission("lobby.build")) {
                 player.sendMessage("§cNo permission!");
                 return true;
             }
-
             if (plugin.isInBuildMode(player)) {
                 plugin.setBuildMode(player, false);
                 player.sendMessage("§cBuild mode disabled!");
@@ -39,7 +36,6 @@ public class BuildCommand implements CommandExecutor {
             return true;
         }
 
-        // With arguments: toggle build mode for another player
         if (!sender.hasPermission("lobby.build.other")) {
             sender.sendMessage("§cYou don't have permission to toggle build mode for others!");
             return true;
@@ -61,7 +57,6 @@ public class BuildCommand implements CommandExecutor {
             target.sendMessage("§cBuild mode disabled by " + sender.getName() + "!");
             sender.sendMessage("§cBuild mode disabled for " + target.getName() + "!");
         }
-
         return true;
     }
 }
