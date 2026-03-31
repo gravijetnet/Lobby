@@ -1,12 +1,14 @@
 package net.gravijet.lobby;
 
 import net.gravijet.lobby.command.*;
+import net.gravijet.lobby.jumppad.JumppadListener;
+import net.gravijet.lobby.jumppad.JumppadManager;
 import net.gravijet.lobby.listener.LobbyListener;
+import net.gravijet.lobby.listener.SpeedCookieListener;
 import net.gravijet.lobby.selector.ServerSelectorManager;
 import net.gravijet.lobby.zone.ZoneListener;
 import net.gravijet.lobby.zone.ZoneManager;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -16,13 +18,10 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.ScoreboardManager;
-import org.bukkit.scoreboard.Team;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -30,19 +29,12 @@ import java.util.UUID;
 
 public class Main extends JavaPlugin {
 
-    // -------------------------------------------------------------------------
-    // Fields
-    // -------------------------------------------------------------------------
-
     private final Set<UUID> buildModePlayers = new HashSet<>();
-    private ScoreboardManager    scoreboardManager;
+    private ScoreboardManager scoreboardManager;
     private ServerSelectorManager serverSelectorManager;
-    private ZoneManager           zoneManager;
+    private ZoneManager zoneManager;
+    private JumppadManager jumppadManager;
     private boolean hasPlaceholderAPI = false;
-
-    // -------------------------------------------------------------------------
-    // Lifecycle
-    // -------------------------------------------------------------------------
 
     @Override
     public void onEnable() {
@@ -55,10 +47,16 @@ public class Main extends JavaPlugin {
         zoneManager.loadZones();
         zoneManager.startParticleTask();
 
+        jumppadManager = new JumppadManager(this);
+        jumppadManager.loadJumppads();
+
         getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
 
+        GetSpeedCookieCommand cookieCommand = new GetSpeedCookieCommand(this);
         getServer().getPluginManager().registerEvents(new LobbyListener(this, zoneManager), this);
-        getServer().getPluginManager().registerEvents(new ZoneListener(this, zoneManager),  this);
+        getServer().getPluginManager().registerEvents(new ZoneListener(this, zoneManager), this);
+        getServer().getPluginManager().registerEvents(new JumppadListener(this, jumppadManager), this);
+        getServer().getPluginManager().registerEvents(new SpeedCookieListener(this, cookieCommand), this);
 
         getCommand("build").setExecutor(new BuildCommand(this));
         getCommand("setspawn").setExecutor(new SetSpawnCommand(this));
@@ -66,13 +64,10 @@ public class Main extends JavaPlugin {
         getCommand("fly").setExecutor(new FlyCommand(this));
         getCommand("zone").setExecutor(new ZoneCommand(this, zoneManager));
         getCommand("lobbyreload").setExecutor(new ReloadCommand(this));
+        getCommand("jumppad").setExecutor(new JumppadCommand(this, jumppadManager));
+        getCommand("getspeedcookie").setExecutor(cookieCommand);
 
-        if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
-            hasPlaceholderAPI = true;
-            getLogger().info("PlaceholderAPI found — placeholder support enabled.");
-        } else {
-            getLogger().warning("PlaceholderAPI not found — placeholders will not resolve.");
-        }
+        hasPlaceholderAPI = Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null;
 
         Bukkit.setDefaultGameMode(GameMode.SURVIVAL);
         loadSpawnLocation();
@@ -91,10 +86,6 @@ public class Main extends JavaPlugin {
         getServer().getMessenger().unregisterOutgoingPluginChannel(this);
     }
 
-    // -------------------------------------------------------------------------
-    // World setup
-    // -------------------------------------------------------------------------
-
     public void setupWorld(World world) {
         world.setGameRuleValue("doDaylightCycle", "false");
         world.setTime(6000);
@@ -102,11 +93,6 @@ public class Main extends JavaPlugin {
         world.setThundering(false);
     }
 
-    // -------------------------------------------------------------------------
-    // Player setup
-    // -------------------------------------------------------------------------
-
-    /** Full player initialisation: game mode, inventory, effects, teleport. */
     public void setupPlayer(Player player) {
         if (isInBuildMode(player)) {
             player.setGameMode(GameMode.CREATIVE);
@@ -124,10 +110,6 @@ public class Main extends JavaPlugin {
         player.setHealth(20.0);
         player.setFoodLevel(20);
         player.setSaturation(20f);
-        //speed und jump boost 2 entfernen?
-       // player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 1, false, false));
-       // player.addPotionEffect(new PotionEffect(PotionEffectType.JUMP,  Integer.MAX_VALUE, 0, false, false));
-
         player.getInventory().clear();
 
         if (!isInBuildMode(player)) {
@@ -143,44 +125,37 @@ public class Main extends JavaPlugin {
         }
     }
 
-    /** Fills the lobby hotbar items for a non-build-mode player. */
     public void setupInventory(Player player) {
-        // Slot 0: Server Selector
         ItemStack serverSelector = new ItemStack(Material.COMPASS);
         ItemMeta selectorMeta = serverSelector.getItemMeta();
         selectorMeta.setDisplayName("§cServer Selector");
         serverSelector.setItemMeta(selectorMeta);
         player.getInventory().setItem(0, serverSelector);
 
-        // Slot 1: Ender Butt
         ItemStack enderButt = new ItemStack(Material.ENDER_PEARL);
         ItemMeta enderMeta = enderButt.getItemMeta();
         enderMeta.setDisplayName("§cEnder Butt");
         enderButt.setItemMeta(enderMeta);
         player.getInventory().setItem(1, enderButt);
 
-        // Slot 2: Coinshop
         ItemStack coinshop = new ItemStack(Material.GOLD_INGOT);
         ItemMeta coinshopMeta = coinshop.getItemMeta();
         coinshopMeta.setDisplayName("§cCoinshop");
         coinshop.setItemMeta(coinshopMeta);
         player.getInventory().setItem(2, coinshop);
 
-        // Slot 4: Lobby Blocks — sandstone blocks placeable in the lobby
         ItemStack lobbyBlocks = new ItemStack(Material.SANDSTONE, 64);
         ItemMeta lobbyMeta = lobbyBlocks.getItemMeta();
         lobbyMeta.setDisplayName("§cLobby Blocks");
         lobbyBlocks.setItemMeta(lobbyMeta);
         player.getInventory().setItem(4, lobbyBlocks);
 
-        // Slot 6: Settings
         ItemStack settings = new ItemStack(Material.REDSTONE_TORCH_ON);
         ItemMeta settingsMeta = settings.getItemMeta();
         settingsMeta.setDisplayName("§cSettings");
         settings.setItemMeta(settingsMeta);
         player.getInventory().setItem(6, settings);
 
-        // Slot 7: Friends (1.8: SKULL_ITEM with damage 3 for player heads)
         ItemStack friends = new ItemStack(Material.SKULL_ITEM, 1, (short) 3);
         SkullMeta friendsMeta = (SkullMeta) friends.getItemMeta();
         friendsMeta.setDisplayName("§cFriends");
@@ -188,21 +163,14 @@ public class Main extends JavaPlugin {
         friends.setItemMeta(friendsMeta);
         player.getInventory().setItem(7, friends);
 
-        // Slot 8: Visibility toggle
         updateVisibilityItem(player);
-
-        // Slots 3, 5 remain empty
     }
-
-    // -------------------------------------------------------------------------
-    // Visibility
-    // -------------------------------------------------------------------------
 
     public void updateVisibilityItem(Player player) {
         String visibility = getConfig().getString(
                 "players." + player.getUniqueId() + ".visibility", "ALL");
 
-        short  dyeDamage;
+        short dyeDamage;
         String displayName;
         switch (visibility) {
             case "VIP":
@@ -217,7 +185,7 @@ public class Main extends JavaPlugin {
                 dyeDamage   = 1;
                 displayName = "§cNo players are visible";
                 break;
-            default: // ALL
+            default:
                 dyeDamage   = 10;
                 displayName = "§aAll players are visible";
                 break;
@@ -249,7 +217,7 @@ public class Main extends JavaPlugin {
                 case "NONE":
                     player.hidePlayer(online);
                     break;
-                default: // ALL
+                default:
                     player.showPlayer(online);
                     break;
             }
@@ -274,10 +242,6 @@ public class Main extends JavaPlugin {
         updatePlayerVisibility(player);
     }
 
-    // -------------------------------------------------------------------------
-    // Scoreboard & tab list
-    // -------------------------------------------------------------------------
-
     private void updateAllScoreboards() {
         for (Player player : Bukkit.getOnlinePlayers()) {
             updateScoreboard(player);
@@ -290,19 +254,18 @@ public class Main extends JavaPlugin {
         objective.setDisplayName("§c§lexample.invalid");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
 
-        int score = 15;
-        objective.getScore("§7§m-------------------").setScore(score--);
-        objective.getScore("§8» §cPlayers: §6" + Bukkit.getOnlinePlayers().size()).setScore(score--);
-        objective.getScore("§f ").setScore(score--);
-        objective.getScore("§7§oexample.invalid").setScore(score--);
-        objective.getScore("§7§o§m-------------------").setScore(score--);
+        objective.getScore("§7§m-------------------").setScore(9);
+        objective.getScore("§8>> §cRank: §6" + getPlaceholder(player, "%rank%")).setScore(8);
+        objective.getScore("§8>> §cPlayers: §6" + getPlaceholder(player, "%players%")).setScore(7);
+        objective.getScore("§8>> §cCoins: §6" + getPlaceholder(player, "%coins%")).setScore(6);
+        objective.getScore("§8>> §cLevel: §6" + getPlaceholder(player, "%level%")).setScore(5);
+        objective.getScore("§8>> §cPlaytime: §6" + getPlaceholder(player, "%playtime%") + "h").setScore(4);
+        objective.getScore("§f ").setScore(3);
+        objective.getScore("§7§oexample.invalid").setScore(2);
+        objective.getScore("§7§o§m-------------------").setScore(1);
 
         player.setScoreboard(board);
     }
-
-    // -------------------------------------------------------------------------
-    // Build mode
-    // -------------------------------------------------------------------------
 
     public boolean isInBuildMode(Player player) {
         return buildModePlayers.contains(player.getUniqueId());
@@ -324,10 +287,6 @@ public class Main extends JavaPlugin {
             setupInventory(player);
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Spawn location
-    // -------------------------------------------------------------------------
 
     public Location getSpawnLocation() {
         if (!getConfig().contains("spawn.world")) return null;
@@ -366,48 +325,27 @@ public class Main extends JavaPlugin {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Accessors
-    // -------------------------------------------------------------------------
-
     public ServerSelectorManager getServerSelectorManager() { return serverSelectorManager; }
     public ZoneManager           getZoneManager()           { return zoneManager; }
+    public JumppadManager        getJumppadManager()        { return jumppadManager; }
 
-    // -------------------------------------------------------------------------
-    // Configuration reload
-    // -------------------------------------------------------------------------
-
-    /**
-     * Reloads the plugin configuration from config.yml and updates all managers.
-     * This should be called when the config file has been modified externally.
-     */
     public void reloadPluginConfig() {
-        // Reload the config file
         reloadConfig();
 
-        // Update server selector configuration
         serverSelectorManager.loadConfig();
 
-        // Reload zones and restart particle task
         zoneManager.stopParticleTask();
         zoneManager.loadZones();
         zoneManager.startParticleTask();
 
-        // Reapply world settings
+        jumppadManager.loadJumppads();
+
         for (World world : Bukkit.getWorlds()) {
             setupWorld(world);
         }
 
-        // Re-check for PlaceholderAPI
         hasPlaceholderAPI = Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null;
 
-        if (hasPlaceholderAPI) {
-            getLogger().info("PlaceholderAPI found — placeholder support enabled.");
-        } else {
-            getLogger().warning("PlaceholderAPI not found — placeholders will not resolve.");
-        }
-
-        // Update visibility for all online players (permissions may have changed)
         for (Player player : Bukkit.getOnlinePlayers()) {
             updatePlayerVisibility(player);
             updateVisibilityItem(player);
@@ -417,15 +355,10 @@ public class Main extends JavaPlugin {
         getLogger().info("Configuration reloaded successfully!");
     }
 
-    // -------------------------------------------------------------------------
-    // Placeholder helpers
-    // -------------------------------------------------------------------------
-
     private String getPlaceholder(Player player, String placeholder) {
         if (hasPlaceholderAPI) {
             return me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, placeholder);
         }
-        // Fallback for placeholders if PlaceholderAPI is not available
         return placeholder;
     }
 }

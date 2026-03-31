@@ -17,7 +17,6 @@ public class SpawnCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        // Determine target player
         Player target;
         if (args.length == 0) {
             if (!(sender instanceof Player)) {

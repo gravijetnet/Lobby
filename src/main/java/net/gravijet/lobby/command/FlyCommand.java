@@ -16,19 +16,16 @@ public class FlyCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        // If no arguments, toggle sender's own fly (must be a player)
         if (args.length == 0) {
             if (!(sender instanceof Player)) {
                 sender.sendMessage("§cUsage: /fly <player>");
                 return true;
             }
             Player player = (Player) sender;
-
             if (!player.hasPermission("lobby.fly")) {
                 player.sendMessage("§cNo permission!");
                 return true;
             }
-
             if (player.getAllowFlight()) {
                 player.setAllowFlight(false);
                 player.setFlying(false);
@@ -41,7 +38,6 @@ public class FlyCommand implements CommandExecutor {
             return true;
         }
 
-        // With arguments: toggle fly for another player
         if (!sender.hasPermission("lobby.fly.other")) {
             sender.sendMessage("§cYou don't have permission to toggle fly for others!");
             return true;
@@ -64,7 +60,6 @@ public class FlyCommand implements CommandExecutor {
             target.sendMessage("§cFly disabled by " + sender.getName() + "!");
             sender.sendMessage("§cFly disabled for " + target.getName() + "!");
         }
-
         return true;
     }
 }

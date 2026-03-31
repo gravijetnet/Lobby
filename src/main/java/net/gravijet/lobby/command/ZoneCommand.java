@@ -9,23 +9,6 @@ import org.bukkit.entity.Player;
 
 import java.util.Collection;
 
-/**
- * Handles the {@code /zone} command and all its sub-commands.
- *
- * <pre>
- * /zone wand                         – Give the Zone Wand to the sender
- * /zone save <name> [minY] [maxY]    – Save current selection as a named zone
- * /zone delete <name>                – Delete a saved zone
- * /zone list                         – List all saved zones
- * /zone clear                        – Discard the current selection
- * /zone info <name>                  – Show corner details for a zone
- * /zone setperm <name> <permission>  – Require a permission to enter a zone
- * /zone clearperm <name>             – Remove the permission restriction
- * /zone setmessage <name> <message>  – Set the deny message for a zone
- * </pre>
- *
- * Permission: {@code lobby.zone} required for all sub-commands.
- */
 public final class ZoneCommand implements CommandExecutor {
 
     private final Main        plugin;
@@ -34,16 +17,10 @@ public final class ZoneCommand implements CommandExecutor {
     public ZoneCommand(Main plugin, ZoneManager zoneManager) {
         this.plugin      = plugin;
         this.zoneManager = zoneManager;
-
     }
-
-    // =========================================================================
-    // Entry point
-    // =========================================================================
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        // Permission check for all zone commands
         if (!sender.hasPermission("lobby.zone")) {
             sender.sendMessage("§cYou don't have permission to use zone commands.");
             return true;
@@ -54,25 +31,23 @@ public final class ZoneCommand implements CommandExecutor {
             return true;
         }
 
-        String subCommand = args[0].toLowerCase();
+        String sub = args[0].toLowerCase();
 
-        // Subcommands that require a player (give, save, clear)
-        if (subCommand.equals("wand") || subCommand.equals("save") || subCommand.equals("clear")) {
+        if (sub.equals("wand") || sub.equals("save") || sub.equals("clear")) {
             if (!(sender instanceof Player)) {
                 sender.sendMessage("§cThis subcommand can only be used by players.");
                 return true;
             }
             Player player = (Player) sender;
-            switch (subCommand) {
-                case "wand":       handleGive(player);                break;
-                case "save":       handleSave(player, args);          break;
-                case "clear":      handleClear(player);               break;
+            switch (sub) {
+                case "wand":  handleGive(player);       break;
+                case "save":  handleSave(player, args); break;
+                case "clear": handleClear(player);      break;
             }
             return true;
         }
 
-        // Subcommands that can be used by console or players
-        switch (subCommand) {
+        switch (sub) {
             case "delete":        handleDelete(sender, args);        break;
             case "list":          handleList(sender);                break;
             case "info":          handleInfo(sender, args);          break;
@@ -80,19 +55,11 @@ public final class ZoneCommand implements CommandExecutor {
             case "clearperm":     handleClearPerm(sender, args);     break;
             case "setmessage":    handleSetMessage(sender, args);    break;
             case "setblockplace": handleSetBlockPlace(sender, args); break;
-            default:               sendUsage(sender);                 break;
+            default:              sendUsage(sender);                 break;
         }
         return true;
     }
 
-    // =========================================================================
-    // Sub-command handlers
-    // =========================================================================
-
-    /**
-     * /zone wand
-     * Gives the player a Zone Wand.
-     */
     private void handleGive(Player player) {
         player.getInventory().addItem(ZoneManager.createWand());
         player.sendMessage("§aZone Wand given!");
@@ -100,12 +67,6 @@ public final class ZoneCommand implements CommandExecutor {
         player.sendMessage("§7Shift+right-click to preview the selection.");
     }
 
-    /**
-     * /zone save &lt;name&gt; [minY] [maxY]
-     *
-     * Converts the player's current session into a saved zone. Y-bounds
-     * default to 0 / 256 (full-height column) when not specified.
-     */
     private void handleSave(Player player, String[] args) {
         if (args.length < 2) {
             player.sendMessage("§cUsage: /zone save <name> [minY] [maxY]");
@@ -125,9 +86,7 @@ public final class ZoneCommand implements CommandExecutor {
             return;
         }
 
-        // Parse optional Y bounds
-        int minY = 0;
-        int maxY = 256;
+        int minY = 0, maxY = 256;
         if (args.length >= 4) {
             try {
                 minY = Integer.parseInt(args[2]);
@@ -156,27 +115,18 @@ public final class ZoneCommand implements CommandExecutor {
         }
     }
 
-    /**
-     * /zone delete &lt;name&gt;
-     */
     private void handleDelete(CommandSender sender, String[] args) {
         if (args.length < 2) {
             sender.sendMessage("§cUsage: /zone delete <name>");
             return;
         }
-
-        String name = args[1];
-        if (zoneManager.deleteZone(name)) {
-            sender.sendMessage("§aZone §f'" + name + "' §adeleted.");
+        if (zoneManager.deleteZone(args[1])) {
+            sender.sendMessage("§aZone §f'" + args[1] + "' §adeleted.");
         } else {
-            sender.sendMessage("§cNo zone named §f'" + name + "' §cfound.");
+            sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
         }
     }
 
-    /**
-     * /zone list
-     * Prints all zone names, one per line. Restricted zones are marked with a lock.
-     */
     private void handleList(CommandSender sender) {
         Collection<Zone> all = zoneManager.getAllZones();
         if (all.isEmpty()) {
@@ -186,49 +136,32 @@ public final class ZoneCommand implements CommandExecutor {
         sender.sendMessage("§6Zones §7(" + all.size() + "):");
         int i = 1;
         for (Zone zone : all) {
-            String restrictedMarker = zone.isRestricted() ? " §c[VIP: " + zone.getRequiredPermission() + "]" : "";
+            String marker = zone.isRestricted() ? " §c[VIP: " + zone.getRequiredPermission() + "]" : "";
             sender.sendMessage(String.format("§7  %d. §f%s §8[%s, Y:%d–%d, %d corners]%s",
-                    i++,
-                    zone.getName(),
-                    zone.getWorldName(),
-                    zone.getMinY(),
-                    zone.getMaxY(),
-                    zone.getCorners().size(),
-                    restrictedMarker));
+                    i++, zone.getName(), zone.getWorldName(),
+                    zone.getMinY(), zone.getMaxY(), zone.getCorners().size(), marker));
         }
     }
 
-    /**
-     * /zone clear
-     * Discards the player's current unsaved selection.
-     */
     private void handleClear(Player player) {
         zoneManager.clearSession(player.getUniqueId());
         player.sendMessage("§aSelection cleared.");
     }
 
-
-
-    /**
-     * /zone info &lt;name&gt;
-     * Prints corner coordinates, world, and Y-bounds of the named zone.
-     */
     private void handleInfo(CommandSender sender, String[] args) {
         if (args.length < 2) {
             sender.sendMessage("§cUsage: /zone info <name>");
             return;
         }
-
         Zone zone = zoneManager.getZone(args[1]);
         if (zone == null) {
             sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
             return;
         }
-
         sender.sendMessage("§6§l--- Zone: " + zone.getName() + " ---");
-        sender.sendMessage("§7World:      §f" + zone.getWorldName());
-        sender.sendMessage("§7Y-range:    §f" + zone.getMinY() + " §8– §f" + zone.getMaxY());
-        sender.sendMessage("§7Corners:    §f" + zone.getCorners().size());
+        sender.sendMessage("§7World:   §f" + zone.getWorldName());
+        sender.sendMessage("§7Y-range: §f" + zone.getMinY() + " §8– §f" + zone.getMaxY());
+        sender.sendMessage("§7Corners: §f" + zone.getCorners().size());
         int idx = 1;
         for (int[] c : zone.getCorners()) {
             sender.sendMessage(String.format("§7  #%d §8» §f(%d, %d)", idx++, c[0], c[1]));
@@ -242,110 +175,80 @@ public final class ZoneCommand implements CommandExecutor {
         sender.sendMessage("§7Block placement: §f" + (zone.isAllowBlockPlacement() ? "§aallowed" : "§cdenied"));
     }
 
-    /**
-     * /zone setperm &lt;name&gt; &lt;permission&gt;
-     * Restricts the named zone to players who have the given permission.
-     */
     private void handleSetPerm(CommandSender sender, String[] args) {
         if (args.length < 3) {
             sender.sendMessage("§cUsage: /zone setperm <name> <permission>");
             return;
         }
-        String name = args[1];
-        String perm = args[2];
-        if (zoneManager.setZonePermission(name, perm)) {
-            sender.sendMessage("§aZone §f'" + name + "' §anow requires permission §f" + perm + "§a.");
+        if (zoneManager.setZonePermission(args[1], args[2])) {
+            sender.sendMessage("§aZone §f'" + args[1] + "' §anow requires permission §f" + args[2] + "§a.");
         } else {
-            sender.sendMessage("§cNo zone named §f'" + name + "' §cfound.");
+            sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
         }
     }
 
-    /**
-     * /zone clearperm &lt;name&gt;
-     * Removes the permission restriction from the named zone (open to all).
-     */
     private void handleClearPerm(CommandSender sender, String[] args) {
         if (args.length < 2) {
             sender.sendMessage("§cUsage: /zone clearperm <name>");
             return;
         }
-        String name = args[1];
-        if (zoneManager.setZonePermission(name, null)) {
-            sender.sendMessage("§aPermission restriction removed from zone §f'" + name + "' §a(now open to all).");
+        if (zoneManager.setZonePermission(args[1], null)) {
+            sender.sendMessage("§aPermission restriction removed from zone §f'" + args[1] + "' §a(now open to all).");
         } else {
-            sender.sendMessage("§cNo zone named §f'" + name + "' §cfound.");
+            sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
         }
     }
 
-    /**
-     * /zone setmessage &lt;name&gt; &lt;message...&gt;
-     * Sets the deny-message for the named zone. Supports &amp;-colour codes
-     * and {@code \n} for multi-line messages.
-     * The message may contain spaces — all args after the zone name are joined.
-     */
     private void handleSetMessage(CommandSender sender, String[] args) {
         if (args.length < 3) {
             sender.sendMessage("§cUsage: /zone setmessage <name> <message...>");
             return;
         }
-        String name = args[1];
         StringBuilder sb = new StringBuilder();
         for (int i = 2; i < args.length; i++) {
             if (i > 2) sb.append(' ');
             sb.append(args[i]);
         }
-        // Allow \n in the command input to produce multi-line deny messages.
-        String message = sb.toString().replace("\\n", "\n");
-        if (zoneManager.setZoneDenyMessage(name, message)) {
-            sender.sendMessage("§aDeny-message for zone §f'" + name + "' §aset.");
+        if (zoneManager.setZoneDenyMessage(args[1], sb.toString().replace("\\n", "\n"))) {
+            sender.sendMessage("§aDeny-message for zone §f'" + args[1] + "' §aset.");
         } else {
-            sender.sendMessage("§cNo zone named §f'" + name + "' §cfound.");
+            sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
         }
     }
 
-    /**
-     * /zone setblockplace &lt;name&gt; &lt;true|false&gt;
-     * Sets whether block placement is allowed in the named zone for non-build-mode players.
-     */
     private void handleSetBlockPlace(CommandSender sender, String[] args) {
         if (args.length < 3) {
             sender.sendMessage("§cUsage: /zone setblockplace <name> <true|false>");
             return;
         }
-        String name = args[1];
-        String value = args[2].toLowerCase();
+        String val = args[2].toLowerCase();
         boolean allow;
-        if (value.equals("true") || value.equals("yes") || value.equals("1")) {
+        if (val.equals("true") || val.equals("yes") || val.equals("1")) {
             allow = true;
-        } else if (value.equals("false") || value.equals("no") || value.equals("0")) {
+        } else if (val.equals("false") || val.equals("no") || val.equals("0")) {
             allow = false;
         } else {
             sender.sendMessage("§cValue must be true or false.");
             return;
         }
-        if (zoneManager.setZoneAllowBlockPlacement(name, allow)) {
-            sender.sendMessage("§aZone §f'" + name + "' §ablock placement set to: §f" + allow);
+        if (zoneManager.setZoneAllowBlockPlacement(args[1], allow)) {
+            sender.sendMessage("§aZone §f'" + args[1] + "' §ablock placement set to: §f" + allow);
         } else {
-            sender.sendMessage("§cNo zone named §f'" + name + "' §cfound.");
+            sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
         }
     }
 
-    // =========================================================================
-    // Usage
-    // =========================================================================
-
     private void sendUsage(CommandSender sender) {
-        sender.sendMessage("§c§lGraviJet §7\u00bb §f§lZone §8- §7Commands");
-        sender.sendMessage("§4\u25cf §c/zone wand §7\u00bb §fGet the Zone Wand");
-
-        sender.sendMessage("§4\u25cf §c/zone save <name> [minY maxY] §7\u00bb §fSave selection as zone");
-        sender.sendMessage("§4\u25cf §c/zone delete <name> §7\u00bb §fDelete a zone");
-        sender.sendMessage("§4\u25cf §c/zone list §7\u00bb §fList all zones");
-        sender.sendMessage("§4\u25cf §c/zone clear §7\u00bb §fClear your selection");
-        sender.sendMessage("§4\u25cf §c/zone info <name> §7\u00bb §fShow zone details");
-        sender.sendMessage("§4\u25cf §c/zone setperm <name> <permission> §7\u00bb §fRestrict zone to a permission");
-        sender.sendMessage("§4\u25cf §c/zone clearperm <name> §7\u00bb §fRemove permission restriction");
-        sender.sendMessage("§4\u25cf §c/zone setmessage <name> <msg...> §7\u00bb §fSet deny message (\\n for new line)");
-        sender.sendMessage("§4\u25cf §c/zone setblockplace <name> <true|false> §7\u00bb §fAllow or deny block placement in zone");
+        sender.sendMessage("§c§lGraviJet §7» §f§lZone §8- §7Commands");
+        sender.sendMessage("§4● §c/zone wand §7» §fGet the Zone Wand");
+        sender.sendMessage("§4● §c/zone save <name> [minY maxY] §7» §fSave selection as zone");
+        sender.sendMessage("§4● §c/zone delete <name> §7» §fDelete a zone");
+        sender.sendMessage("§4● §c/zone list §7» §fList all zones");
+        sender.sendMessage("§4● §c/zone clear §7» §fClear your selection");
+        sender.sendMessage("§4● §c/zone info <name> §7» §fShow zone details");
+        sender.sendMessage("§4● §c/zone setperm <name> <permission> §7» §fRestrict zone");
+        sender.sendMessage("§4● §c/zone clearperm <name> §7» §fRemove restriction");
+        sender.sendMessage("§4● §c/zone setmessage <name> <msg...> §7» §fSet deny message");
+        sender.sendMessage("§4● §c/zone setblockplace <name> <true|false> §7» §fBlock placement");
     }
 }

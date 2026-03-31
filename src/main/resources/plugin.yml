@@ -18,12 +18,19 @@ commands:
     usage: /<command>
   zone:
     description: Manage lobby placement zones
-    usage: /zone <give|save|delete|list|clear|info|setperm|clearperm|setmessage>
+    usage: /zone <wand|save|delete|list|clear|info|setperm|clearperm|setmessage|setblockplace>
     permission: lobby.zone
   lobbyreload:
     description: Reloads the plugin configuration
     usage: /<command>
     permission: lobby.reload
+  jumppad:
+    description: Manage jumppads
+    usage: /jumppad <add|remove|list>
+    permission: lobby.jumppad
+  getspeedcookie:
+    description: Get a Speed Cookie
+    usage: /<command>
 permissions:
   lobby.build:
     description: Access to build mode
@@ -45,4 +52,7 @@ permissions:
     default: op
   lobby.reload:
     description: Reload the plugin configuration
+    default: op
+  lobby.jumppad:
+    description: Manage jumppads
     default: op

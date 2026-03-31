@@ -20,29 +20,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Central coordinator for the zone system.
- *
- * <h3>Config format</h3>
- * <pre>
- * zones:
- *   spawn_area:
- *     world: "world"
- *     minY: 0
- *     maxY: 256
- *     corners:
- *       - "120,45"
- *       - "120,80"
- *       - "155,80"
- *     required-permission: "lobby.vip"          # optional
- *     deny-message: "&cVIP only!"               # optional, supports &-colours
- * </pre>
- */
 public final class ZoneManager {
 
-    private static final String WAND_NAME         = "§6Zone Wand";
-    private static final double EDGE_SPACING      = 0.65;
-    private static final double PILLAR_HEIGHT     = 3.0;
+    private static final String WAND_NAME     = "§6Zone Wand";
+    private static final double EDGE_SPACING  = 0.65;
+    private static final double PILLAR_HEIGHT = 3.0;
 
     private final Main                            plugin;
     private final Map<String, Zone>               zones    = new LinkedHashMap<>();
@@ -53,24 +35,16 @@ public final class ZoneManager {
         this.plugin = plugin;
     }
 
-    // =========================================================================
-    // Lifecycle
-    // =========================================================================
-
     public void loadZones() {
         zones.clear();
         ConfigurationSection root = plugin.getConfig().getConfigurationSection("zones");
-        if (root == null) {
-
-            return;
-        }
+        if (root == null) return;
         for (String name : root.getKeys(false)) {
             ConfigurationSection sec = root.getConfigurationSection(name);
             if (sec == null) continue;
             Zone zone = deserializeZone(name, sec);
             if (zone != null) zones.put(name.toLowerCase(), zone);
         }
-
     }
 
     public void saveAll() {
@@ -93,10 +67,6 @@ public final class ZoneManager {
         }
     }
 
-    // =========================================================================
-    // Zone CRUD
-    // =========================================================================
-
     public Zone saveZone(String name, ZoneSelectionSession session, int minY, int maxY) {
         if (name == null || name.trim().isEmpty())
             throw new IllegalArgumentException("Zone name must not be empty.");
@@ -115,15 +85,12 @@ public final class ZoneManager {
                         "All corners must be in the same world (" + worldName + ").");
         }
 
-        // Compute centroid so we know which direction is "outward" for each corner.
         List<Location> sc = session.getCorners();
         double centroidX = 0, centroidZ = 0;
         for (Location loc : sc) { centroidX += loc.getBlockX(); centroidZ += loc.getBlockZ(); }
         centroidX /= sc.size();
         centroidZ /= sc.size();
 
-        // Expand each corner to the outer face of the selected block so that the
-        // block-centre test (bx+0.5, bz+0.5) falls inside the polygon on all sides.
         List<int[]> cornerList = new ArrayList<>();
         for (Location loc : sc) {
             int bx = loc.getBlockX();
@@ -145,60 +112,30 @@ public final class ZoneManager {
         return false;
     }
 
-    public Collection<Zone> getAllZones()  { return zones.values(); }
+    public Collection<Zone> getAllZones()        { return zones.values(); }
     public Zone             getZone(String name) { return zones.get(name.toLowerCase()); }
 
-    // =========================================================================
-    // Access-control CRUD
-    // =========================================================================
-
-    /**
-     * Sets (or clears) the required permission for the named zone and persists.
-     *
-     * @param zoneName   zone name (case-insensitive)
-     * @param permission permission node, or {@code null} / empty to remove restriction
-     * @return {@code true} if the zone was found and updated
-     */
     public boolean setZonePermission(String zoneName, String permission) {
         Zone zone = zones.get(zoneName.toLowerCase());
         if (zone == null) return false;
-        // Trim permission string to avoid issues with trailing spaces
         if (permission != null) {
             permission = permission.trim();
-            if (permission.isEmpty()) {
-                permission = null;
-            }
+            if (permission.isEmpty()) permission = null;
         }
         zone.setRequiredPermission(permission);
         saveAll();
         return true;
     }
 
-    /**
-     * Sets the deny-message for the named zone and persists.
-     * Supports {@code &}-colour codes which are translated on save.
-     *
-     * @param zoneName zone name (case-insensitive)
-     * @param message  raw message with optional §-codes or &-codes
-     * @return {@code true} if the zone was found and updated
-     */
     public boolean setZoneDenyMessage(String zoneName, String message) {
         Zone zone = zones.get(zoneName.toLowerCase());
         if (zone == null) return false;
-        // Replace \n with actual newline characters
         message = message.replace("\\n", "\n");
         zone.setDenyMessage(ChatColor.translateAlternateColorCodes('&', message));
         saveAll();
         return true;
     }
 
-    /**
-     * Sets whether block placement is allowed in the named zone for non-build-mode players.
-     *
-     * @param zoneName zone name (case-insensitive)
-     * @param allow    true to allow block placement, false to deny
-     * @return {@code true} if the zone was found and updated
-     */
     public boolean setZoneAllowBlockPlacement(String zoneName, boolean allow) {
         Zone zone = zones.get(zoneName.toLowerCase());
         if (zone == null) return false;
@@ -207,14 +144,6 @@ public final class ZoneManager {
         return true;
     }
 
-    // =========================================================================
-    // Containment & access checks
-    // =========================================================================
-
-    /**
-     * Returns {@code true} if the given block location falls inside any zone
-     * (regardless of access control). Used by {@code BlockPlaceEvent}.
-     */
     public boolean isInsideAnyZone(Location loc) {
         for (Zone zone : zones.values()) {
             if (zone.contains(loc)) return true;
@@ -222,74 +151,29 @@ public final class ZoneManager {
         return false;
     }
 
-    /**
-     * Returns the first zone at {@code loc} that the player is NOT allowed to
-     * enter, or {@code null} if the player may be there.
-     *
-     * <p>Build-mode players and players with {@code lobby.zone} permission bypass
-     * all restrictions so admins can inspect and set up zones freely.</p>
-     *
-     * @deprecated Use {@link #getDeniedZoneAt(Player, Location)} for clearer semantics.
-     */
-    @Deprecated
-    public Zone getRestrictedZoneAt(Player player, Location loc) {
-        return getDeniedZoneAt(player, loc);
-    }
-
-    /**
-     * Returns the first zone at {@code loc} that the player is NOT allowed to
-     * enter, or {@code null} if the player may be there.
-     *
-     * <p>Build-mode players and players with {@code lobby.zone} permission bypass
-     * all restrictions so admins can inspect and set up zones freely.</p>
-     */
     public Zone getDeniedZoneAt(Player player, Location loc) {
-        // Admins are never blocked.
-        if (plugin.isInBuildMode(player))           return null;
-        if (player.hasPermission("lobby.zone"))     return null;
+        if (plugin.isInBuildMode(player))       return null;
+        if (player.hasPermission("lobby.zone")) return null;
 
         String worldName = loc.getWorld() != null ? loc.getWorld().getName() : null;
         if (worldName == null) return null;
 
         for (Zone zone : zones.values()) {
-            // Skip zones that don't have permission restrictions
             if (!zone.isRestricted()) continue;
-
-            // Check if player is inside this zone
-            if (!zone.containsPoint(worldName, loc.getX(), loc.getY(), loc.getZ())) {
-                continue;
-            }
-
-            // Player is inside a restricted zone
-            // Check if they have permission to enter
-            if (!zone.canEnter(player)) {
-                // Player does NOT have permission
-                return zone;
-            }
-            // Player has permission, continue checking other zones
+            if (!zone.containsPoint(worldName, loc.getX(), loc.getY(), loc.getZ())) continue;
+            if (!zone.canEnter(player)) return zone;
         }
         return null;
     }
 
-    /**
-     * Returns the first zone at the given location, regardless of access restrictions.
-     * Useful for checking if a location is inside any zone.
-     */
     public Zone getZoneAt(Location loc) {
         String worldName = loc.getWorld() != null ? loc.getWorld().getName() : null;
         if (worldName == null) return null;
-
         for (Zone zone : zones.values()) {
-            if (zone.containsPoint(worldName, loc.getX(), loc.getY(), loc.getZ())) {
-                return zone;
-            }
+            if (zone.containsPoint(worldName, loc.getX(), loc.getY(), loc.getZ())) return zone;
         }
         return null;
     }
-
-    // =========================================================================
-    // Session management
-    // =========================================================================
 
     public ZoneSelectionSession getOrCreateSession(UUID playerUUID) {
         return sessions.computeIfAbsent(playerUUID, ZoneSelectionSession::new);
@@ -298,10 +182,6 @@ public final class ZoneManager {
     public ZoneSelectionSession getSession(UUID playerUUID) { return sessions.get(playerUUID); }
     public boolean hasSession(UUID playerUUID)              { return sessions.containsKey(playerUUID); }
     public void    clearSession(UUID playerUUID)            { sessions.remove(playerUUID); }
-
-    // =========================================================================
-    // Zone Wand
-    // =========================================================================
 
     public static ItemStack createWand() {
         ItemStack item = new ItemStack(Material.BLAZE_ROD);
@@ -323,10 +203,6 @@ public final class ZoneManager {
                 && WAND_NAME.equals(item.getItemMeta().getDisplayName());
     }
 
-    // =========================================================================
-    // Particle rendering (in-progress selections only)
-    // =========================================================================
-
     private void tickParticles() {
         for (Map.Entry<UUID, ZoneSelectionSession> entry : sessions.entrySet()) {
             Player player = Bukkit.getPlayer(entry.getKey());
@@ -338,7 +214,6 @@ public final class ZoneManager {
             List<Location> corners = session.getCorners();
             double eyeY = player.getEyeLocation().getY();
 
-            // Corner pillars (orange) — drawn inline to avoid allocating per-tick lists
             for (Location corner : corners) {
                 if (!sameWorld(corner, player)) continue;
                 double cx = corner.getBlockX() + 0.5;
@@ -348,10 +223,9 @@ public final class ZoneManager {
                 }
             }
 
-            // Edges (yellow), close polygon when >= 3 corners
             int n = corners.size();
             for (int i = 0; i < n; i++) {
-                if (i == n - 1 && n < 3) continue; // don't close until valid
+                if (i == n - 1 && n < 3) continue;
                 Location a = corners.get(i);
                 Location b = corners.get((i + 1) % n);
                 if (!sameWorld(a, player) || !sameWorld(b, player)) continue;
@@ -369,13 +243,7 @@ public final class ZoneManager {
         }
     }
 
-    /**
-     * Sends a single COLOURED_DUST particle to the viewer.
-     * In Spigot 1.8, colour is encoded as offsetX/Y/Z = r/g/b (0.0-1.0),
-     * amount=0 (required for colouring), speed=particle size.
-     */
-    private static void spawnDust(Player viewer, double x, double y, double z,
-                                   float r, float g, float b) {
+    private static void spawnDust(Player viewer, double x, double y, double z, float r, float g, float b) {
         Location loc = new Location(viewer.getWorld(), x, y, z);
         try {
             viewer.spigot().playEffect(loc, Effect.COLOURED_DUST, 0, 0, r, g, b, 1.0f, 0, 48);
@@ -388,10 +256,6 @@ public final class ZoneManager {
         return loc.getWorld() != null
                 && loc.getWorld().getName().equals(player.getWorld().getName());
     }
-
-    // =========================================================================
-    // Config serialisation
-    // =========================================================================
 
     private Zone deserializeZone(String name, ConfigurationSection sec) {
         String world = sec.getString("world");
@@ -417,8 +281,7 @@ public final class ZoneManager {
                 return null;
             }
             try {
-                corners.add(new int[]{ Integer.parseInt(parts[0].trim()),
-                                       Integer.parseInt(parts[1].trim()) });
+                corners.add(new int[]{ Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim()) });
             } catch (NumberFormatException e) {
                 plugin.getLogger().warning("Zone '" + name + "': non-integer corner '" + raw + "' — skipping.");
                 return null;
@@ -427,25 +290,15 @@ public final class ZoneManager {
 
         Zone zone = new Zone(name, world, minY, maxY, corners);
 
-        // Access-control fields (optional)
-        String perm = sec.getString("required-permission", "");
-        if (!perm.isEmpty()) {
-            perm = perm.trim();
-            if (!perm.isEmpty()) {
-                zone.setRequiredPermission(perm);
-            }
-        }
+        String perm = sec.getString("required-permission", "").trim();
+        if (!perm.isEmpty()) zone.setRequiredPermission(perm);
 
         String msg = sec.getString("deny-message", "");
         if (!msg.isEmpty()) {
-            // Replace \n with actual newline characters
-            msg = msg.replace("\\n", "\n");
-            zone.setDenyMessage(ChatColor.translateAlternateColorCodes('&', msg));
+            zone.setDenyMessage(ChatColor.translateAlternateColorCodes('&', msg.replace("\\n", "\n")));
         }
 
-        boolean allowBlockPlacement = sec.getBoolean("allow-block-placement", false);
-        zone.setAllowBlockPlacement(allowBlockPlacement);
-
+        zone.setAllowBlockPlacement(sec.getBoolean("allow-block-placement", false));
         return zone;
     }
 
@@ -459,13 +312,10 @@ public final class ZoneManager {
         for (int[] c : zone.getCorners()) cs.add(c[0] + "," + c[1]);
         plugin.getConfig().set(path + ".corners", cs);
 
-        // Access-control — only write when set so the config stays tidy
         if (zone.getRequiredPermission() != null) {
             plugin.getConfig().set(path + ".required-permission", zone.getRequiredPermission());
         }
-        // Replace newlines with \n for storage
-        String denyMessage = zone.getDenyMessage().replace("\n", "\\n");
-        plugin.getConfig().set(path + ".deny-message", denyMessage);
+        plugin.getConfig().set(path + ".deny-message", zone.getDenyMessage().replace("\n", "\\n"));
         plugin.getConfig().set(path + ".allow-block-placement", zone.isAllowBlockPlacement());
     }
 }
