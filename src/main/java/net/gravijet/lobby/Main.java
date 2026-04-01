@@ -29,7 +29,8 @@ import java.util.UUID;
 
 public class Main extends JavaPlugin {
 
-    private final Set<UUID> buildModePlayers = new HashSet<>();
+    private final Set<UUID> buildModePlayers  = new HashSet<>();
+    private final Set<UUID> playersInFlight   = new HashSet<>();
     private ScoreboardManager scoreboardManager;
     private ServerSelectorManager serverSelectorManager;
     private ZoneManager zoneManager;
@@ -283,12 +284,22 @@ public class Main extends JavaPlugin {
     }
 
 
+    public boolean isInFlight(Player player) {
+        return playersInFlight.contains(player.getUniqueId());
+    }
+
+    public void setInFlight(UUID playerId, boolean inFlight) {
+        if (inFlight) playersInFlight.add(playerId);
+        else          playersInFlight.remove(playerId);
+    }
+
     public boolean isInBuildMode(Player player) {
         return buildModePlayers.contains(player.getUniqueId());
     }
 
     public void clearBuildMode(Player player) {
         buildModePlayers.remove(player.getUniqueId());
+        playersInFlight.remove(player.getUniqueId());
     }
 
     public void setBuildMode(Player player, boolean enable) {

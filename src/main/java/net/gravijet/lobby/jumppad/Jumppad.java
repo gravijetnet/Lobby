@@ -49,9 +49,20 @@ public final class Jumppad {
         this.velZ = z;
     }
 
-    /** Sets the vertical launch strength (velY) while preserving X and Z. */
+    /**
+     * Scales the entire velocity vector so its magnitude equals {@code strength}.
+     * If the current vector is zero (no direction set yet), only velY is set.
+     */
     void setStrength(double strength) {
-        this.velY = strength;
+        double mag = Math.sqrt(velX * velX + velY * velY + velZ * velZ);
+        if (mag < 1e-6) {
+            this.velY = strength;
+        } else {
+            double scale = strength / mag;
+            this.velX *= scale;
+            this.velY *= scale;
+            this.velZ *= scale;
+        }
     }
 
     void setTarget(String world, double x, double y, double z) {

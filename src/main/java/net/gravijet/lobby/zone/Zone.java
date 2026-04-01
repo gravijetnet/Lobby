@@ -53,7 +53,9 @@ public final class Zone {
 
     void setRequiredPermission(String permission) {
         if (permission != null) {
-            permission = permission.trim();
+            // Bukkit normalises permission names to lowercase internally;
+            // storing lowercase avoids mismatches with permission plugins.
+            permission = permission.trim().toLowerCase(java.util.Locale.ROOT);
             if (permission.isEmpty()) permission = null;
         }
         this.requiredPermission = permission;

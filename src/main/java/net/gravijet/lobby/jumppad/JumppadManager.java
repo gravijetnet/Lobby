@@ -2,6 +2,7 @@ package net.gravijet.lobby.jumppad;
 
 import net.gravijet.lobby.Main;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.util.Vector;
 
@@ -18,9 +19,18 @@ public final class JumppadManager {
     private final Map<String, Jumppad> jumppads   = new LinkedHashMap<>();
     private final Map<String, String>  blockIndex = new HashMap<>();
 
+    // Minecraft in-air physics constants
+    // Horizontal velocity is multiplied by 0.91 every tick.
+    // Vertical: vy = (vy - 0.08) * 0.98 every tick.
+    private static final double H_DRAG = 0.91;
+    private static final double V_DRAG = 0.98;
+    private static final double GRAVITY = 0.08;
+
     public JumppadManager(Main plugin) {
         this.plugin = plugin;
     }
+
+    // ── Block / jumppad management ────────────────────────────────────────────
 
     private String blockKey(Location loc) {
         return loc.getWorld().getName() + ":"
@@ -106,40 +116,82 @@ public final class JumppadManager {
         return jumppads.values();
     }
 
+    // ── Physics helpers ───────────────────────────────────────────────────────
+
     /**
-     * Calculates the launch velocity required to reach the target coordinates from
-     * the player's current position, using Minecraft physics simulation.
+     * Pre-calculates the full parabolic trajectory from {@code start} using
+     * Minecraft in-air physics (horizontal drag 0.91/tick, gravity 0.08/tick,
+     * vertical drag 0.98/tick).  Returns one Location per tick.
      *
-     * Uses the pad's velY as the vertical launch speed. The horizontal components are
-     * derived by computing the time of flight to the target's Y level and back-calculating
-     * the required X/Z velocities accounting for Minecraft's 0.98 drag factor.
+     * The trajectory ends when the player has returned to (or below) their
+     * starting Y level after the initial ascent, or after {@code maxTicks}.
+     */
+    public static List<Location> calculateTrajectory(Location start,
+                                                     double vx, double vy, double vz,
+                                                     int maxTicks) {
+        World  world = start.getWorld();
+        float  yaw   = start.getYaw();
+        float  pitch = start.getPitch();
+
+        List<Location> path = new ArrayList<>();
+        double x = start.getX(), y = start.getY(), z = start.getZ();
+        double cvx = vx, cvy = vy, cvz = vz;
+        boolean peaked = false;
+
+        for (int t = 0; t < maxTicks; t++) {
+            x += cvx;
+            y += cvy;
+            z += cvz;
+            cvx *= H_DRAG;
+            cvz *= H_DRAG;
+            double newVy = (cvy - GRAVITY) * V_DRAG;
+            if (cvy >= 0 && newVy < 0) peaked = true;
+            cvy = newVy;
+
+            path.add(new Location(world, x, y, z, yaw, pitch));
+
+            // Stop once we descend back to start level (after the peak)
+            if (peaked && y <= start.getY()) break;
+            if (y < -64) break;
+        }
+        return path;
+    }
+
+    /**
+     * Calculates the initial velocity needed to reach (targetX, targetY, targetZ)
+     * from the player's current location, using {@code velY} as the vertical component.
+     *
+     * Uses correct Minecraft air physics:
+     *   horizontal: v *= 0.91 per tick  → sum = vx0 * (1 - 0.91^n) / 0.09
+     *   vertical:   vy = (vy - 0.08) * 0.98 per tick
      */
     public static Vector calculateVelocityToTarget(Location from, double velY,
                                                    double targetX, double targetY, double targetZ) {
         double targetDy = targetY - from.getY();
-        double vy = velY;
-        double y  = 0.0;
-        int ticks = 1;
+        double vy  = velY;
+        double y   = 0.0;
+        int    ticks = 1;
 
-        // Simulate vertical arc; stop when descending and at or past target Y
-        for (int t = 1; t <= 200; t++) {
+        // Simulate vertical arc to find the tick when we reach the target height on the way down
+        for (int t = 1; t <= 300; t++) {
             y  += vy;
-            vy  = (vy - 0.08) * 0.98;
+            vy  = (vy - GRAVITY) * V_DRAG;
             ticks = t;
+            // Stop once we've peaked and come back down to target height
             if (vy < 0 && y <= targetDy) break;
         }
 
-        // Horizontal displacement sum with drag: x = vx0 * (1 - 0.98^n) / 0.02
-        // => vx0 = dx * 0.02 / (1 - 0.98^n)
-        double drag   = Math.pow(0.98, ticks);
-        double factor = (1.0 - drag) / 0.02;
-        if (factor < 0.01) factor = 0.01; // guard against near-zero
+        // Horizontal: x = vx0 * (1 - H_DRAG^n) / (1 - H_DRAG) = vx0 * (1 - 0.91^n) / 0.09
+        double factor = (1.0 - Math.pow(H_DRAG, ticks)) / (1.0 - H_DRAG);
+        if (factor < 0.01) factor = 0.01;
 
         double dx = targetX - from.getX();
         double dz = targetZ - from.getZ();
 
         return new Vector(dx / factor, velY, dz / factor);
     }
+
+    // ── Persistence ───────────────────────────────────────────────────────────
 
     public void loadJumppads() {
         jumppads.clear();
@@ -157,14 +209,13 @@ public final class JumppadManager {
                 pad.addBlockKey(key);
                 blockIndex.put(key, name.toLowerCase());
             }
-            // Load optional target location
             if (entry.contains("target.world")) {
                 String tw = entry.getString("target.world");
                 if (tw != null && !tw.isEmpty()) {
-                    double tx = entry.getDouble("target.x");
-                    double ty = entry.getDouble("target.y");
-                    double tz = entry.getDouble("target.z");
-                    pad.setTarget(tw, tx, ty, tz);
+                    pad.setTarget(tw,
+                            entry.getDouble("target.x"),
+                            entry.getDouble("target.y"),
+                            entry.getDouble("target.z"));
                 }
             }
             jumppads.put(name.toLowerCase(), pad);
