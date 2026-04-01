@@ -313,7 +313,7 @@ public final class ZoneManager {
 
         Zone zone = new Zone(name, world, minY, maxY, corners);
 
-        String perm = sec.getString("required-permission", "").trim();
+        String perm = sec.getString("required-permission", "").trim().toLowerCase(java.util.Locale.ROOT);
         if (!perm.isEmpty()) zone.setRequiredPermission(perm);
 
         String msg = sec.getString("deny-message", "");

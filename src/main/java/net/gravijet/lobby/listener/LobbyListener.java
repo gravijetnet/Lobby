@@ -67,6 +67,7 @@ public class LobbyListener implements Listener {
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getLocation().getY() <= 200) continue;
             if (plugin.isInBuildMode(player)) continue;
+            if (plugin.isInFlight(player)) continue; // jumppad trajectory manages position
             ejectAndCancelPearl(player);
             Location spawn = plugin.getSpawnLocation();
             if (spawn != null) {
@@ -82,6 +83,7 @@ public class LobbyListener implements Listener {
     private void tickAccessCheck() {
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (plugin.isInBuildMode(player)) continue;
+            if (plugin.isInFlight(player)) continue; // jumppad trajectory manages position
             if (player.hasPermission("lobby.zone")) continue;
 
             Zone denied = zoneManager.getDeniedZoneAt(player, player.getLocation());
@@ -342,7 +344,8 @@ public class LobbyListener implements Listener {
             return;
         }
 
-        if (plugin.isInBuildMode(player) || player.hasPermission("lobby.zone")) return;
+        if (plugin.isInBuildMode(player) || plugin.isInFlight(player)
+                || player.hasPermission("lobby.zone")) return;
 
         // ── Zone permission check ────────────────────────────────────────────────
         // Only block movement when the player is crossing INTO a denied zone.
@@ -449,7 +452,7 @@ public class LobbyListener implements Listener {
         int t1 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (loc.getBlock().getType() == Material.SANDSTONE)
                 loc.getBlock().setType(Material.REDSTONE_BLOCK);
-        }, 80L).getTaskId();
+        }, 100L).getTaskId();
         int t2 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             lobbyBlockTasks.remove(loc);
             if (loc.getBlock().getType() == Material.REDSTONE_BLOCK)
