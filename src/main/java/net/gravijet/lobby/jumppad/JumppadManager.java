@@ -86,13 +86,14 @@ public final class JumppadManager {
         return jumppads.values();
     }
 
-    public static Vector calculateDirectionalLaunch(Player player, double baseStrength, double heightMultiplier) {
-        float yaw = player.getLocation().getYaw();
-        double radYaw = Math.toRadians(yaw);
-        double forwardX = -Math.sin(radYaw);
-        double forwardZ = Math.cos(radYaw);
+    public static Vector calculateLaunchVector(double baseStrength, double heightMultiplier) {
+        // East is negative X direction.
+        double forwardX = -1.0;
+        double forwardZ = 0.0;
+
         double horizontalStrength = baseStrength * 0.8;
         double verticalStrength = baseStrength * heightMultiplier;
+
         return new Vector(forwardX * horizontalStrength, verticalStrength, forwardZ * horizontalStrength);
     }
 
