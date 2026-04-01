@@ -19,6 +19,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
@@ -82,11 +83,23 @@ public class LobbyListener implements Listener {
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (plugin.isInBuildMode(player)) continue;
             if (player.hasPermission("lobby.zone")) continue;
+
             Zone denied = zoneManager.getDeniedZoneAt(player, player.getLocation());
-            if (denied == null) continue;
-            sendDenyMessage(player, denied);
-            Location spawn = plugin.getSpawnLocation();
-            if (spawn != null) player.teleport(spawn);
+            if (denied != null) {
+                sendDenyMessage(player, denied);
+                Location spawn = plugin.getSpawnLocation();
+                if (spawn != null) {
+                    player.teleport(spawn);
+                    // Restore flight state at the new (spawn) location on the next tick
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        if (player.isOnline()) plugin.restoreFlightState(player);
+                    }, 1L);
+                }
+                continue;
+            }
+
+            // Ensure flight state is correct for the player's current zone
+            applyFlightState(player, player.getLocation());
         }
     }
 
@@ -211,11 +224,21 @@ public class LobbyListener implements Listener {
         event.setCancelled(true);
     }
 
+    // Right-click on item frame: already blocked for non-build-mode players
     @EventHandler
     public void onInteractEntity(PlayerInteractEntityEvent event) {
         if (event.getRightClicked() instanceof ItemFrame && !plugin.isInBuildMode(event.getPlayer())) {
             event.setCancelled(true);
         }
+    }
+
+    // Left-click (punch) on item frame: block globally for non-build-mode players
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof ItemFrame)) return;
+        if (!(event.getDamager() instanceof Player)) return;
+        if (plugin.isInBuildMode((Player) event.getDamager())) return;
+        event.setCancelled(true);
     }
 
     @EventHandler
@@ -259,11 +282,18 @@ public class LobbyListener implements Listener {
 
     @EventHandler
     public void onDrop(PlayerDropItemEvent event) {
+        // Diamond blocks can never be dropped (regardless of build mode)
+        if (event.getItemDrop().getItemStack().getType() == Material.DIAMOND_BLOCK) {
+            event.setCancelled(true);
+            return;
+        }
         if (!plugin.isInBuildMode(event.getPlayer())) event.setCancelled(true);
     }
 
     @EventHandler
     public void onPickup(PlayerPickupItemEvent event) {
+        // Diamond blocks can always be picked up by anyone
+        if (event.getItem().getItemStack().getType() == Material.DIAMOND_BLOCK) return;
         if (!plugin.isInBuildMode(event.getPlayer())) event.setCancelled(true);
     }
 
@@ -284,7 +314,7 @@ public class LobbyListener implements Listener {
         Bukkit.getScheduler().runTaskLater(plugin, () -> plugin.setupPlayer(event.getPlayer()), 1L);
     }
 
-    @EventHandler(priority = EventPriority.HIGH)
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerMove(PlayerMoveEvent event) {
         if (event.getTo() == null) return;
         Player   player = event.getPlayer();
@@ -314,31 +344,73 @@ public class LobbyListener implements Listener {
 
         if (plugin.isInBuildMode(player) || player.hasPermission("lobby.zone")) return;
 
-        Zone denied = zoneManager.getDeniedZoneAt(player, to);
-        if (denied == null) return;
-
-        event.setCancelled(true);
-
-        double dx   = to.getX() - from.getX();
-        double dz   = to.getZ() - from.getZ();
-        double hLen = Math.sqrt(dx * dx + dz * dz);
-        Vector knockback;
-        if (hLen > 1e-6) {
-            knockback = new Vector(-dx / hLen * 0.55, 0.22, -dz / hLen * 0.55);
-        } else {
-            double cx = 0, cz = 0;
-            for (int[] c : denied.getCorners()) { cx += c[0]; cz += c[1]; }
-            cx /= denied.getCorners().size();
-            cz /= denied.getCorners().size();
-            double awayX   = from.getX() - cx;
-            double awayZ   = from.getZ() - cz;
-            double awayLen = Math.sqrt(awayX * awayX + awayZ * awayZ);
-            knockback = awayLen > 1e-6
-                    ? new Vector(awayX / awayLen * 0.55, 0.22, awayZ / awayLen * 0.55)
-                    : new Vector(0, 0.3, 0);
+        // ── Zone permission check ────────────────────────────────────────────────
+        // Only block movement when the player is crossing INTO a denied zone.
+        // If they are somehow already inside (e.g. after a teleport), the periodic
+        // tickAccessCheck handles the ejection so we do not create a movement freeze.
+        Zone deniedTo = zoneManager.getDeniedZoneAt(player, to);
+        if (deniedTo != null) {
+            // Only apply knockback if they are transitioning into the zone.
+            Zone deniedFrom = zoneManager.getDeniedZoneAt(player, from);
+            if (deniedFrom == null || !deniedFrom.getName().equals(deniedTo.getName())) {
+                event.setCancelled(true);
+                double dx   = to.getX() - from.getX();
+                double dz   = to.getZ() - from.getZ();
+                double hLen = Math.sqrt(dx * dx + dz * dz);
+                Vector knockback;
+                if (hLen > 1e-6) {
+                    knockback = new Vector(-dx / hLen * 0.55, 0.22, -dz / hLen * 0.55);
+                } else {
+                    double cx = 0, cz = 0;
+                    for (int[] c : deniedTo.getCorners()) { cx += c[0]; cz += c[1]; }
+                    cx /= deniedTo.getCorners().size();
+                    cz /= deniedTo.getCorners().size();
+                    double awayX   = from.getX() - cx;
+                    double awayZ   = from.getZ() - cz;
+                    double awayLen = Math.sqrt(awayX * awayX + awayZ * awayZ);
+                    knockback = awayLen > 1e-6
+                            ? new Vector(awayX / awayLen * 0.55, 0.22, awayZ / awayLen * 0.55)
+                            : new Vector(0, 0.3, 0);
+                }
+                player.setVelocity(knockback);
+                sendDenyMessage(player, deniedTo);
+            }
+            return;
         }
-        player.setVelocity(knockback);
-        sendDenyMessage(player, denied);
+
+        // ── Flight-zone transition ───────────────────────────────────────────────
+        boolean flightFrom = zoneManager.isFlightAllowedAt(from);
+        boolean flightTo   = zoneManager.isFlightAllowedAt(to);
+        if (flightFrom && !flightTo) {
+            // Entering a no-fly zone: disable flight
+            player.setAllowFlight(false);
+            player.setFlying(false);
+        } else if (!flightFrom && flightTo) {
+            // Leaving a no-fly zone: restore flight if permitted
+            if (player.hasPermission("lobby.fly")) {
+                player.setAllowFlight(true);
+                player.setFlying(true);
+            }
+        }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Applies the correct flight state for a player based on their current zone
+     * and their fly permission. Call this after teleports or state changes.
+     */
+    private void applyFlightState(Player player, Location loc) {
+        if (plugin.isInBuildMode(player)) return;
+        if (zoneManager.isFlightAllowedAt(loc)) {
+            if (player.hasPermission("lobby.fly")) {
+                player.setAllowFlight(true);
+                player.setFlying(true);
+            }
+        } else {
+            player.setAllowFlight(false);
+            player.setFlying(false);
+        }
     }
 
     private void handleLobbyItemUse(Player player, ItemStack item) {

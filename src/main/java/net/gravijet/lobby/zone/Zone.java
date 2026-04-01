@@ -18,6 +18,7 @@ public final class Zone {
     private String  requiredPermission;
     private String  denyMessage;
     private boolean allowBlockPlacement;
+    private boolean allowFlight = true;
 
     private static final String DEFAULT_DENY_MESSAGE = "§cYou are not allowed to enter this area!";
 
@@ -41,6 +42,7 @@ public final class Zone {
     public String  getRequiredPermission()  { return requiredPermission; }
     public String  getDenyMessage()         { return denyMessage; }
     public boolean isAllowBlockPlacement()  { return allowBlockPlacement; }
+    public boolean isAllowFlight()          { return allowFlight; }
 
     public boolean isRestricted() { return requiredPermission != null && !requiredPermission.isEmpty(); }
 
@@ -63,6 +65,10 @@ public final class Zone {
 
     void setAllowBlockPlacement(boolean allow) {
         this.allowBlockPlacement = allow;
+    }
+
+    void setAllowFlight(boolean allow) {
+        this.allowFlight = allow;
     }
 
     public boolean contains(Location loc) {

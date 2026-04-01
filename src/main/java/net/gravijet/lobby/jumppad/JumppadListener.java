@@ -1,7 +1,9 @@
 package net.gravijet.lobby.jumppad;
 
 import net.gravijet.lobby.Main;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -41,6 +43,20 @@ public final class JumppadListener implements Listener {
         if (last != null && now - last < COOLDOWN_MS) return;
         cooldowns.put(player.getUniqueId(), now);
 
-        player.setVelocity(new Vector(pad.getVelX(), pad.getVelY(), pad.getVelZ()));
+        Vector velocity;
+        if (pad.hasTarget()) {
+            World targetWorld = Bukkit.getWorld(pad.getTargetWorld());
+            if (targetWorld != null) {
+                velocity = JumppadManager.calculateVelocityToTarget(
+                        player.getLocation(), pad.getVelY(),
+                        pad.getTargetX(), pad.getTargetY(), pad.getTargetZ());
+            } else {
+                velocity = new Vector(pad.getVelX(), pad.getVelY(), pad.getVelZ());
+            }
+        } else {
+            velocity = new Vector(pad.getVelX(), pad.getVelY(), pad.getVelZ());
+        }
+
+        player.setVelocity(velocity);
     }
 }

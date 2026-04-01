@@ -301,6 +301,25 @@ public class Main extends JavaPlugin {
             player.setGameMode(GameMode.SURVIVAL);
             player.getInventory().clear();
             setupInventory(player);
+            // Restore flight immediately after exiting build mode
+            restoreFlightState(player);
+        }
+    }
+
+    /**
+     * Enables flight for players who have the lobby.fly permission and are not in
+     * a no-fly zone; disables it otherwise. Call after any state change that might
+     * affect the player's flight eligibility.
+     */
+    public void restoreFlightState(Player player) {
+        if (isInBuildMode(player)) return;
+        boolean zoneAllows = zoneManager == null || zoneManager.isFlightAllowedAt(player.getLocation());
+        if (player.hasPermission("lobby.fly") && zoneAllows) {
+            player.setAllowFlight(true);
+            player.setFlying(true);
+        } else {
+            player.setAllowFlight(false);
+            player.setFlying(false);
         }
     }
 
