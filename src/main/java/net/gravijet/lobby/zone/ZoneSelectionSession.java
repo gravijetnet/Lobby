@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public final class ZoneSelectionSession {
 
-    private final UUID           ownerUUID;
+    private final UUID ownerUUID;
     private final List<Location> corners = new ArrayList<>();
 
     public ZoneSelectionSession(UUID ownerUUID) {
@@ -31,11 +31,25 @@ public final class ZoneSelectionSession {
         corners.clear();
     }
 
-    public UUID getOwnerUUID() { return ownerUUID; }
-    public List<Location> getCorners() { return Collections.unmodifiableList(corners); }
-    public int     size()       { return corners.size(); }
-    public boolean isEmpty()    { return corners.isEmpty(); }
-    public boolean isComplete() { return corners.size() >= 3; }
+    public UUID getOwnerUUID() {
+        return ownerUUID;
+    }
+
+    public List<Location> getCorners() {
+        return Collections.unmodifiableList(corners);
+    }
+
+    public int size() {
+        return corners.size();
+    }
+
+    public boolean isEmpty() {
+        return corners.isEmpty();
+    }
+
+    public boolean isComplete() {
+        return corners.size() >= 3;
+    }
 
     public String getWorldName() {
         if (corners.isEmpty()) return null;

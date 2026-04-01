@@ -29,10 +29,11 @@ public class FlyCommand implements CommandExecutor {
             if (player.getAllowFlight()) {
                 player.setAllowFlight(false);
                 player.setFlying(false);
+                plugin.setFlightPreference(player, false);
                 player.sendMessage("§cFly disabled!");
             } else {
-                player.setAllowFlight(true);
-                player.setFlying(true);
+                plugin.setFlightPreference(player, true);
+                plugin.restoreFlightState(player);
                 player.sendMessage("§aFly enabled!");
             }
             return true;
@@ -49,16 +50,17 @@ public class FlyCommand implements CommandExecutor {
             return true;
         }
 
-        boolean newState = !target.getAllowFlight();
-        target.setAllowFlight(newState);
-        target.setFlying(newState);
-
-        if (newState) {
-            target.sendMessage("§aFly enabled by " + sender.getName() + "!");
-            sender.sendMessage("§aFly enabled for " + target.getName() + "!");
-        } else {
+        if (target.getAllowFlight()) {
+            target.setAllowFlight(false);
+            target.setFlying(false);
+            plugin.setFlightPreference(target, false);
             target.sendMessage("§cFly disabled by " + sender.getName() + "!");
             sender.sendMessage("§cFly disabled for " + target.getName() + "!");
+        } else {
+            plugin.setFlightPreference(target, true);
+            plugin.restoreFlightState(target);
+            target.sendMessage("§aFly enabled by " + sender.getName() + "!");
+            sender.sendMessage("§aFly enabled for " + target.getName() + "!");
         }
         return true;
     }
