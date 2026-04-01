@@ -24,16 +24,7 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.player.PlayerChangedWorldEvent;
-import org.bukkit.event.player.PlayerDropItemEvent;
-import org.bukkit.event.player.PlayerInteractEntityEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
-import org.bukkit.event.player.PlayerPickupItemEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PlayerRespawnEvent;
-import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.event.player.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.util.Vector;
@@ -45,29 +36,24 @@ import java.util.UUID;
 
 public class LobbyListener implements Listener {
 
-    private final Main        plugin;
+    private final Main plugin;
     private final ZoneManager zoneManager;
 
-    private final Map<UUID, EnderPearl> enderButtPearls     = new HashMap<>();
-    private final Map<UUID, Location>   lastPearlLoc        = new HashMap<>();
-    private final Map<Location, int[]>  lobbyBlockTasks     = new HashMap<>();
-    private final Map<UUID, Long>       denyMessageCooldown = new HashMap<>();
-
-    private static final long DENY_MESSAGE_COOLDOWN_MS = 1_500L;
+    private final Map<UUID, EnderPearl> enderButtPearls = new HashMap<>();
+    private final Map<UUID, Location> lastPearlLoc = new HashMap<>();
+    private final Map<Location, int[]> lobbyBlockTasks = new HashMap<>();
 
     public LobbyListener(Main plugin, ZoneManager zoneManager) {
-        this.plugin      = plugin;
+        this.plugin = plugin;
         this.zoneManager = zoneManager;
-        Bukkit.getScheduler().runTaskTimer(plugin, this::tickEnderButt,   1L,  1L);
-        Bukkit.getScheduler().runTaskTimer(plugin, this::tickHeightLimit, 1L,  4L);
-        Bukkit.getScheduler().runTaskTimer(plugin, this::tickAccessCheck, 20L, 10L);
+        Bukkit.getScheduler().runTaskTimer(plugin, this::tickEnderButt, 1L, 1L);
+        Bukkit.getScheduler().runTaskTimer(plugin, this::tickHeightLimit, 1L, 4L);
     }
 
     private void tickHeightLimit() {
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getLocation().getY() <= 200) continue;
             if (plugin.isInBuildMode(player)) continue;
-            if (plugin.isInFlight(player)) continue; // jumppad trajectory manages position
             ejectAndCancelPearl(player);
             Location spawn = plugin.getSpawnLocation();
             if (spawn != null) {
@@ -80,36 +66,11 @@ public class LobbyListener implements Listener {
         }
     }
 
-    private void tickAccessCheck() {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (plugin.isInBuildMode(player)) continue;
-            if (plugin.isInFlight(player)) continue; // jumppad trajectory manages position
-            if (player.hasPermission("lobby.zone")) continue;
-
-            Zone denied = zoneManager.getDeniedZoneAt(player, player.getLocation());
-            if (denied != null) {
-                sendDenyMessage(player, denied);
-                Location spawn = plugin.getSpawnLocation();
-                if (spawn != null) {
-                    player.teleport(spawn);
-                    // Restore flight state at the new (spawn) location on the next tick
-                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                        if (player.isOnline()) plugin.restoreFlightState(player);
-                    }, 1L);
-                }
-                continue;
-            }
-
-            // Ensure flight state is correct for the player's current zone
-            applyFlightState(player, player.getLocation());
-        }
-    }
-
     private void tickEnderButt() {
         Iterator<Map.Entry<UUID, EnderPearl>> it = enderButtPearls.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<UUID, EnderPearl> entry = it.next();
-            UUID       uuid  = entry.getKey();
+            UUID uuid = entry.getKey();
             EnderPearl pearl = entry.getValue();
             if (pearl.isDead() || !pearl.isValid()) {
                 it.remove();
@@ -132,26 +93,22 @@ public class LobbyListener implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        plugin.clearBuildMode(player);
-        player.setGameMode(GameMode.SURVIVAL);
-        for (Player online : Bukkit.getOnlinePlayers()) player.showPlayer(online);
         plugin.setupPlayer(player);
     }
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        Player     player = event.getPlayer();
-        EnderPearl pearl  = enderButtPearls.remove(player.getUniqueId());
-        lastPearlLoc.remove(player.getUniqueId());
-        if (pearl != null && !pearl.isDead()) { pearl.eject(); pearl.remove(); }
-        plugin.clearBuildMode(player);
-        denyMessageCooldown.remove(player.getUniqueId());
+        Player player = event.getPlayer();
+        ejectAndCancelPearl(player);
+        plugin.setFlightPreference(player, !plugin.isFlightDisabledByUser(player));
+        plugin.saveConfig();
         player.setScoreboard(Bukkit.getScoreboardManager().getNewScoreboard());
     }
 
     @EventHandler
     public void onWorldChange(PlayerChangedWorldEvent event) {
         plugin.setupWorld(event.getPlayer().getWorld());
+        plugin.restoreFlightState(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -166,8 +123,8 @@ public class LobbyListener implements Listener {
             event.setCancelled(false);
             return;
         }
-        ItemStack item   = event.getItemInHand();
-        Block     placed = event.getBlockPlaced();
+        ItemStack item = event.getItemInHand();
+        Block placed = event.getBlockPlaced();
         if (isLobbyBlock(item)) {
             Zone zone = zoneManager.getZoneAt(placed.getLocation());
             if (zone != null && !zone.isAllowBlockPlacement()) {
@@ -182,7 +139,7 @@ public class LobbyListener implements Listener {
                     slot4.setAmount(64);
                 } else {
                     ItemStack fresh = new ItemStack(Material.SANDSTONE, 64);
-                    ItemMeta  meta  = fresh.getItemMeta();
+                    ItemMeta meta = fresh.getItemMeta();
                     meta.setDisplayName("§cLobby Blocks");
                     fresh.setItemMeta(meta);
                     player.getInventory().setItem(4, fresh);
@@ -196,9 +153,9 @@ public class LobbyListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onInteract(PlayerInteractEvent event) {
-        Player    player = event.getPlayer();
-        ItemStack item   = event.getItem();
-        Action    action = event.getAction();
+        Player player = event.getPlayer();
+        ItemStack item = event.getItem();
+        Action action = event.getAction();
 
         if (plugin.isInBuildMode(player)) return;
 
@@ -218,15 +175,13 @@ public class LobbyListener implements Listener {
             return;
         }
 
-        if (SpeedCookieListener.isSpeedCookie(item)
-                && (action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK)) {
+        if (SpeedCookieListener.isSpeedCookie(item) && (action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK)) {
             return;
         }
 
         event.setCancelled(true);
     }
 
-    // Right-click on item frame: already blocked for non-build-mode players
     @EventHandler
     public void onInteractEntity(PlayerInteractEntityEvent event) {
         if (event.getRightClicked() instanceof ItemFrame && !plugin.isInBuildMode(event.getPlayer())) {
@@ -234,7 +189,6 @@ public class LobbyListener implements Listener {
         }
     }
 
-    // Left-click (punch) on item frame: block globally for non-build-mode players
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         if (!(event.getEntity() instanceof ItemFrame)) return;
@@ -249,7 +203,10 @@ public class LobbyListener implements Listener {
         EnderPearl pearl = (EnderPearl) event.getEntity();
         UUID uuid = null;
         for (Map.Entry<UUID, EnderPearl> e : enderButtPearls.entrySet()) {
-            if (e.getValue().getEntityId() == pearl.getEntityId()) { uuid = e.getKey(); break; }
+            if (e.getValue().getEntityId() == pearl.getEntityId()) {
+                uuid = e.getKey();
+                break;
+            }
         }
         if (uuid == null) return;
         enderButtPearls.remove(uuid);
@@ -269,8 +226,7 @@ public class LobbyListener implements Listener {
         Player player = (Player) event.getWhoClicked();
         if (event.getView().getTitle().contains("Server Selector")) {
             event.setCancelled(true);
-            if (event.getClickedInventory() != null
-                    && event.getClickedInventory().equals(event.getView().getTopInventory())) {
+            if (event.getClickedInventory() != null && event.getClickedInventory().equals(event.getView().getTopInventory())) {
                 plugin.getServerSelectorManager().handleMenuClick(player, event.getSlot());
             }
             return;
@@ -284,7 +240,6 @@ public class LobbyListener implements Listener {
 
     @EventHandler
     public void onDrop(PlayerDropItemEvent event) {
-        // Diamond blocks can never be dropped (regardless of build mode)
         if (event.getItemDrop().getItemStack().getType() == Material.DIAMOND_BLOCK) {
             event.setCancelled(true);
             return;
@@ -294,14 +249,15 @@ public class LobbyListener implements Listener {
 
     @EventHandler
     public void onPickup(PlayerPickupItemEvent event) {
-        // Diamond blocks can always be picked up by anyone
         if (event.getItem().getItemStack().getType() == Material.DIAMOND_BLOCK) return;
         if (!plugin.isInBuildMode(event.getPlayer())) event.setCancelled(true);
     }
 
     @EventHandler
     public void onDamage(EntityDamageEvent event) {
-        if (event.getEntity() instanceof Player) event.setCancelled(true);
+        if (event.getEntity() instanceof Player && event.getCause() != EntityDamageEvent.DamageCause.VOID) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler
@@ -319,21 +275,11 @@ public class LobbyListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerMove(PlayerMoveEvent event) {
         if (event.getTo() == null) return;
-        Player   player = event.getPlayer();
-        Location from   = event.getFrom();
-        Location to     = event.getTo();
+        Player player = event.getPlayer();
+        Location from = event.getFrom();
+        Location to = event.getTo();
 
-        if (to.getY() > 200 && !plugin.isInBuildMode(player)) {
-            ejectAndCancelPearl(player);
-            event.setCancelled(true);
-            Location spawn = plugin.getSpawnLocation();
-            if (spawn != null) player.teleport(spawn);
-            return;
-        }
-
-        if (from.getBlockX() == to.getBlockX()
-                && from.getBlockY() == to.getBlockY()
-                && from.getBlockZ() == to.getBlockZ()) {
+        if (from.getBlockX() == to.getBlockX() && from.getBlockY() == to.getBlockY() && from.getBlockZ() == to.getBlockZ()) {
             return;
         }
 
@@ -344,75 +290,16 @@ public class LobbyListener implements Listener {
             return;
         }
 
-        if (plugin.isInBuildMode(player) || plugin.isInFlight(player)
-                || player.hasPermission("lobby.zone")) return;
-
-        // ── Zone permission check ────────────────────────────────────────────────
-        // Only block movement when the player is crossing INTO a denied zone.
-        // If they are somehow already inside (e.g. after a teleport), the periodic
-        // tickAccessCheck handles the ejection so we do not create a movement freeze.
-        Zone deniedTo = zoneManager.getDeniedZoneAt(player, to);
-        if (deniedTo != null) {
-            // Only apply knockback if they are transitioning into the zone.
-            Zone deniedFrom = zoneManager.getDeniedZoneAt(player, from);
-            if (deniedFrom == null || !deniedFrom.getName().equals(deniedTo.getName())) {
-                event.setCancelled(true);
-                double dx   = to.getX() - from.getX();
-                double dz   = to.getZ() - from.getZ();
-                double hLen = Math.sqrt(dx * dx + dz * dz);
-                Vector knockback;
-                if (hLen > 1e-6) {
-                    knockback = new Vector(-dx / hLen * 0.55, 0.22, -dz / hLen * 0.55);
-                } else {
-                    double cx = 0, cz = 0;
-                    for (int[] c : deniedTo.getCorners()) { cx += c[0]; cz += c[1]; }
-                    cx /= deniedTo.getCorners().size();
-                    cz /= deniedTo.getCorners().size();
-                    double awayX   = from.getX() - cx;
-                    double awayZ   = from.getZ() - cz;
-                    double awayLen = Math.sqrt(awayX * awayX + awayZ * awayZ);
-                    knockback = awayLen > 1e-6
-                            ? new Vector(awayX / awayLen * 0.55, 0.22, awayZ / awayLen * 0.55)
-                            : new Vector(0, 0.3, 0);
-                }
-                player.setVelocity(knockback);
-                sendDenyMessage(player, deniedTo);
-            }
-            return;
-        }
-
-        // ── Flight-zone transition ───────────────────────────────────────────────
         boolean flightFrom = zoneManager.isFlightAllowedAt(from);
-        boolean flightTo   = zoneManager.isFlightAllowedAt(to);
+        boolean flightTo = zoneManager.isFlightAllowedAt(to);
+
         if (flightFrom && !flightTo) {
-            // Entering a no-fly zone: disable flight
             player.setAllowFlight(false);
             player.setFlying(false);
         } else if (!flightFrom && flightTo) {
-            // Leaving a no-fly zone: restore flight if permitted
-            if (player.hasPermission("lobby.fly")) {
+            if (!plugin.isFlightDisabledByUser(player) && player.hasPermission("lobby.fly")) {
                 player.setAllowFlight(true);
-                player.setFlying(true);
             }
-        }
-    }
-
-    // ── Helpers ──────────────────────────────────────────────────────────────────
-
-    /**
-     * Applies the correct flight state for a player based on their current zone
-     * and their fly permission. Call this after teleports or state changes.
-     */
-    private void applyFlightState(Player player, Location loc) {
-        if (plugin.isInBuildMode(player)) return;
-        if (zoneManager.isFlightAllowedAt(loc)) {
-            if (player.hasPermission("lobby.fly")) {
-                player.setAllowFlight(true);
-                player.setFlying(true);
-            }
-        } else {
-            player.setAllowFlight(false);
-            player.setFlying(false);
         }
     }
 
@@ -423,7 +310,10 @@ public class LobbyListener implements Listener {
             UUID uuid = player.getUniqueId();
             EnderPearl old = enderButtPearls.remove(uuid);
             lastPearlLoc.remove(uuid);
-            if (old != null && !old.isDead()) { old.eject(); old.remove(); }
+            if (old != null && !old.isDead()) {
+                old.eject();
+                old.remove();
+            }
             player.playSound(player.getLocation(), Sound.ENDERMAN_TELEPORT, 1.0f, 1.0f);
             EnderPearl pearl = player.launchProjectile(EnderPearl.class);
             pearl.setVelocity(player.getLocation().getDirection().multiply(1.5));
@@ -437,8 +327,7 @@ public class LobbyListener implements Listener {
             Bukkit.getScheduler().runTask(plugin, () -> player.performCommand("settings"));
         } else if (item.getType() == Material.SKULL_ITEM && nameEquals(item, "§cFriends")) {
             Bukkit.getScheduler().runTask(plugin, () -> player.performCommand("friends menu"));
-        } else if (item.getType() == Material.INK_SACK && item.hasItemMeta()
-                && item.getItemMeta().getDisplayName().contains("visible")) {
+        } else if (item.getType() == Material.INK_SACK && item.hasItemMeta() && item.getItemMeta().getDisplayName().contains("visible")) {
             plugin.cycleVisibilityMode(player);
         }
     }
@@ -450,48 +339,33 @@ public class LobbyListener implements Listener {
             Bukkit.getScheduler().cancelTask(existing[1]);
         }
         int t1 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (loc.getBlock().getType() == Material.SANDSTONE)
-                loc.getBlock().setType(Material.REDSTONE_BLOCK);
+            if (loc.getBlock().getType() == Material.SANDSTONE) loc.getBlock().setType(Material.REDSTONE_BLOCK);
         }, 100L).getTaskId();
         int t2 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             lobbyBlockTasks.remove(loc);
-            if (loc.getBlock().getType() == Material.REDSTONE_BLOCK)
-                loc.getBlock().setType(Material.AIR);
+            if (loc.getBlock().getType() == Material.REDSTONE_BLOCK) loc.getBlock().setType(Material.AIR);
         }, 140L).getTaskId();
-        lobbyBlockTasks.put(loc, new int[]{ t1, t2 });
+        lobbyBlockTasks.put(loc, new int[]{t1, t2});
     }
 
     private void ejectAndCancelPearl(Player player) {
         if (player.isInsideVehicle()) player.getVehicle().eject();
         EnderPearl pearl = enderButtPearls.remove(player.getUniqueId());
         lastPearlLoc.remove(player.getUniqueId());
-        if (pearl != null && !pearl.isDead()) { pearl.eject(); pearl.remove(); }
-    }
-
-    private void sendDenyMessage(Player player, Zone zone) {
-        long now  = System.currentTimeMillis();
-        Long last = denyMessageCooldown.get(player.getUniqueId());
-        if (last != null && now - last < DENY_MESSAGE_COOLDOWN_MS) return;
-        denyMessageCooldown.put(player.getUniqueId(), now);
-        for (String line : zone.getDenyMessage().split("\n", -1)) player.sendMessage(line);
+        if (pearl != null && !pearl.isDead()) {
+            pearl.eject();
+            pearl.remove();
+        }
     }
 
     private boolean isLobbyBlock(ItemStack item) {
-        return item != null
-                && item.getType() == Material.SANDSTONE
-                && item.hasItemMeta()
-                && "§cLobby Blocks".equals(item.getItemMeta().getDisplayName());
+        return item != null && item.getType() == Material.SANDSTONE && item.hasItemMeta() && "§cLobby Blocks".equals(item.getItemMeta().getDisplayName());
     }
 
     private boolean isLobbyItem(ItemStack item) {
         if (item == null || !item.hasItemMeta()) return false;
         String n = item.getItemMeta().getDisplayName();
-        return "§cServer Selector".equals(n)
-                || "§cEnder Butt".equals(n)
-                || "§cCoinshop".equals(n)
-                || "§cSettings".equals(n)
-                || "§cFriends".equals(n)
-                || n.contains("visible");
+        return "§cServer Selector".equals(n) || "§cEnder Butt".equals(n) || "§cCoinshop".equals(n) || "§cSettings".equals(n) || "§cFriends".equals(n) || n.contains("visible");
     }
 
     private boolean nameEquals(ItemStack item, String name) {

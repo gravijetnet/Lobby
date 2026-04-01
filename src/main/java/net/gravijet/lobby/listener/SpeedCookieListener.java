@@ -40,8 +40,7 @@ public class SpeedCookieListener implements Listener {
 
     @EventHandler
     public void onInteract(PlayerInteractEvent event) {
-        if (event.getAction() != Action.RIGHT_CLICK_AIR
-                && event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        if (event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         Player player = event.getPlayer();
         if (!isSpeedCookie(player.getItemInHand())) return;
 
@@ -61,15 +60,11 @@ public class SpeedCookieListener implements Listener {
         Player player = event.getPlayer();
         if (!isSpeedCookie(event.getItem())) return;
         player.setFoodLevel(20);
-        player.addPotionEffect(
-                new PotionEffect(PotionEffectType.SPEED, 20 * 60 * 10, 1, false, false), true);
+        player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 20 * 60 * 10, 1, false, false), true);
         player.sendMessage("§aYou received §bSpeed II §afor §b10 minutes§a!");
     }
 
     public static boolean isSpeedCookie(ItemStack item) {
-        return item != null
-                && item.getType() == Material.COOKIE
-                && item.hasItemMeta()
-                && "§bSpeed Cookie".equals(item.getItemMeta().getDisplayName());
+        return item != null && item.getType() == Material.COOKIE && item.hasItemMeta() && "§bSpeed Cookie".equals(item.getItemMeta().getDisplayName());
     }
 }

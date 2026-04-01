@@ -11,11 +11,11 @@ import java.util.Collection;
 
 public final class ZoneCommand implements CommandExecutor {
 
-    private final Main        plugin;
+    private final Main plugin;
     private final ZoneManager zoneManager;
 
     public ZoneCommand(Main plugin, ZoneManager zoneManager) {
-        this.plugin      = plugin;
+        this.plugin = plugin;
         this.zoneManager = zoneManager;
     }
 
@@ -40,23 +40,47 @@ public final class ZoneCommand implements CommandExecutor {
             }
             Player player = (Player) sender;
             switch (sub) {
-                case "wand":  handleGive(player);       break;
-                case "save":  handleSave(player, args); break;
-                case "clear": handleClear(player);      break;
+                case "wand":
+                    handleGive(player);
+                    break;
+                case "save":
+                    handleSave(player, args);
+                    break;
+                case "clear":
+                    handleClear(player);
+                    break;
             }
             return true;
         }
 
         switch (sub) {
-            case "delete":        handleDelete(sender, args);        break;
-            case "list":          handleList(sender);                break;
-            case "info":          handleInfo(sender, args);          break;
-            case "setperm":       handleSetPerm(sender, args);       break;
-            case "clearperm":     handleClearPerm(sender, args);     break;
-            case "setmessage":    handleSetMessage(sender, args);    break;
-            case "setblockplace": handleSetBlockPlace(sender, args); break;
-            case "setflight":     handleSetFlight(sender, args);     break;
-            default:              sendUsage(sender);                 break;
+            case "delete":
+                handleDelete(sender, args);
+                break;
+            case "list":
+                handleList(sender);
+                break;
+            case "info":
+                handleInfo(sender, args);
+                break;
+            case "setperm":
+                handleSetPerm(sender, args);
+                break;
+            case "clearperm":
+                handleClearPerm(sender, args);
+                break;
+            case "setmessage":
+                handleSetMessage(sender, args);
+                break;
+            case "setblockplace":
+                handleSetBlockPlace(sender, args);
+                break;
+            case "setflight":
+                handleSetFlight(sender, args);
+                break;
+            default:
+                sendUsage(sender);
+                break;
         }
         return true;
     }
@@ -108,9 +132,7 @@ public final class ZoneCommand implements CommandExecutor {
         try {
             Zone zone = zoneManager.saveZone(name, session, minY, maxY);
             zoneManager.clearSession(player.getUniqueId());
-            player.sendMessage("§aZone §f'" + zone.getName() + "' §asaved with §f"
-                    + zone.getCorners().size() + " §acorners"
-                    + (minY == 0 && maxY == 256 ? " (full height)." : " (Y: " + minY + "–" + maxY + ")."));
+            player.sendMessage("§aZone §f'" + zone.getName() + "' §asaved with §f" + zone.getCorners().size() + " §acorners" + (minY == 0 && maxY == 256 ? " (full height)." : " (Y: " + minY + "–" + maxY + ")."));
         } catch (IllegalArgumentException e) {
             player.sendMessage("§c" + e.getMessage());
         }
@@ -138,9 +160,7 @@ public final class ZoneCommand implements CommandExecutor {
         int i = 1;
         for (Zone zone : all) {
             String marker = zone.isRestricted() ? " §c[VIP: " + zone.getRequiredPermission() + "]" : "";
-            sender.sendMessage(String.format("§7  %d. §f%s §8[%s, Y:%d–%d, %d corners]%s",
-                    i++, zone.getName(), zone.getWorldName(),
-                    zone.getMinY(), zone.getMaxY(), zone.getCorners().size(), marker));
+            sender.sendMessage(String.format("§7  %d. §f%s §8[%s, Y:%d–%d, %d corners]%s", i++, zone.getName(), zone.getWorldName(), zone.getMinY(), zone.getMaxY(), zone.getCorners().size(), marker));
         }
     }
 

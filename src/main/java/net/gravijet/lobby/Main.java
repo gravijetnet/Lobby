@@ -29,8 +29,8 @@ import java.util.UUID;
 
 public class Main extends JavaPlugin {
 
-    private final Set<UUID> buildModePlayers  = new HashSet<>();
-    private final Set<UUID> playersInFlight   = new HashSet<>();
+    private final Set<UUID> buildModePlayers = new HashSet<>();
+    private final Set<UUID> flightDisabledByUser = new HashSet<>();
     private ScoreboardManager scoreboardManager;
     private ServerSelectorManager serverSelectorManager;
     private ZoneManager zoneManager;
@@ -79,12 +79,21 @@ public class Main extends JavaPlugin {
         }
 
         Bukkit.getScheduler().runTaskTimer(this, this::updateAllScoreboards, 0L, 20L);
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            setupPlayer(player);
+        }
     }
 
     @Override
     public void onDisable() {
         if (zoneManager != null) zoneManager.stopParticleTask();
         getServer().getMessenger().unregisterOutgoingPluginChannel(this);
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            boolean prefersFlight = !isFlightDisabledByUser(player);
+            getConfig().set("players." + player.getUniqueId() + ".prefers-flight", prefersFlight);
+        }
+        saveConfig();
     }
 
     public void setupWorld(World world) {
@@ -99,13 +108,6 @@ public class Main extends JavaPlugin {
             player.setGameMode(GameMode.CREATIVE);
         } else {
             player.setGameMode(GameMode.SURVIVAL);
-            if (player.hasPermission("lobby.fly")) {
-                player.setAllowFlight(true);
-                player.setFlying(true);
-            } else {
-                player.setAllowFlight(false);
-                player.setFlying(false);
-            }
         }
 
         player.setHealth(20.0);
@@ -124,6 +126,10 @@ public class Main extends JavaPlugin {
         if (spawn != null) {
             player.teleport(spawn);
         }
+
+        boolean prefersFlight = getConfig().getBoolean("players." + player.getUniqueId() + ".prefers-flight", player.hasPermission("lobby.fly"));
+        setFlightPreference(player, prefersFlight);
+        restoreFlightState(player);
     }
 
     public void setupInventory(Player player) {
@@ -168,8 +174,7 @@ public class Main extends JavaPlugin {
     }
 
     public void updateVisibilityItem(Player player) {
-        String visibility = getConfig().getString(
-                "players." + player.getUniqueId() + ".visibility", "ALL");
+        String visibility = getConfig().getString("players." + player.getUniqueId() + ".visibility", "ALL");
 
         short dyeDamage;
         String displayName;
@@ -200,8 +205,7 @@ public class Main extends JavaPlugin {
     }
 
     public void updatePlayerVisibility(Player player) {
-        String visibility = getConfig().getString(
-                "players." + player.getUniqueId() + ".visibility", "ALL");
+        String visibility = getConfig().getString("players." + player.getUniqueId() + ".visibility", "ALL");
         String vipPerm = getConfig().getString("visibility.vip-permission", "lobby.visibility.vip");
         String staffPerm = getConfig().getString("visibility.staff-permission", "lobby.visibility.staff");
 
@@ -226,8 +230,7 @@ public class Main extends JavaPlugin {
     }
 
     public void cycleVisibilityMode(Player player) {
-        String current = getConfig().getString(
-                "players." + player.getUniqueId() + ".visibility", "ALL");
+        String current = getConfig().getString("players." + player.getUniqueId() + ".visibility", "ALL");
         String next;
         switch (current) {
             case "ALL":
@@ -265,10 +268,8 @@ public class Main extends JavaPlugin {
 
         int playtime = 0;
         try {
-            playtime = Integer.parseInt(
-                    getPlaceholder(player, "%phoenix_player_playtime_seconds%")) / 3600;
-        } catch (NumberFormatException ignored) {
-        }
+            playtime = Integer.parseInt(getPlaceholder(player, "%phoenix_player_playtime_seconds%")) / 3600;
+        } catch (NumberFormatException ignored) {}
 
         int score = 15;
         objective.getScore("§7§m-------------------").setScore(score--);
@@ -283,23 +284,20 @@ public class Main extends JavaPlugin {
         player.setScoreboard(board);
     }
 
-
-    public boolean isInFlight(Player player) {
-        return playersInFlight.contains(player.getUniqueId());
+    public boolean isFlightDisabledByUser(Player player) {
+        return flightDisabledByUser.contains(player.getUniqueId());
     }
 
-    public void setInFlight(UUID playerId, boolean inFlight) {
-        if (inFlight) playersInFlight.add(playerId);
-        else          playersInFlight.remove(playerId);
+    public void setFlightPreference(Player player, boolean wantsFlight) {
+        if (wantsFlight) {
+            flightDisabledByUser.remove(player.getUniqueId());
+        } else {
+            flightDisabledByUser.add(player.getUniqueId());
+        }
     }
 
     public boolean isInBuildMode(Player player) {
         return buildModePlayers.contains(player.getUniqueId());
-    }
-
-    public void clearBuildMode(Player player) {
-        buildModePlayers.remove(player.getUniqueId());
-        playersInFlight.remove(player.getUniqueId());
     }
 
     public void setBuildMode(Player player, boolean enable) {
@@ -312,22 +310,24 @@ public class Main extends JavaPlugin {
             player.setGameMode(GameMode.SURVIVAL);
             player.getInventory().clear();
             setupInventory(player);
-            // Restore flight immediately after exiting build mode
             restoreFlightState(player);
         }
     }
 
-    /**
-     * Enables flight for players who have the lobby.fly permission and are not in
-     * a no-fly zone; disables it otherwise. Call after any state change that might
-     * affect the player's flight eligibility.
-     */
     public void restoreFlightState(Player player) {
         if (isInBuildMode(player)) return;
+
+        if (isFlightDisabledByUser(player)) {
+            player.setAllowFlight(false);
+            player.setFlying(false);
+            return;
+        }
+
         boolean zoneAllows = zoneManager == null || zoneManager.isFlightAllowedAt(player.getLocation());
-        if (player.hasPermission("lobby.fly") && zoneAllows) {
+        boolean hasPermission = player.hasPermission("lobby.fly");
+
+        if (hasPermission && zoneAllows) {
             player.setAllowFlight(true);
-            player.setFlying(true);
         } else {
             player.setAllowFlight(false);
             player.setFlying(false);
@@ -358,6 +358,8 @@ public class Main extends JavaPlugin {
         getConfig().set("spawn.pitch", loc.getPitch());
         saveConfig();
     }
+
+
 
     private void loadSpawnLocation() {
         if (!getConfig().contains("spawn.world")) {
