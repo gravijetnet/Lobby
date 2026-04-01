@@ -3,6 +3,7 @@ package net.gravijet.lobby.jumppad;
 import net.gravijet.lobby.Main;
 import org.bukkit.Location;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -67,6 +68,31 @@ public final class JumppadManager {
         return true;
     }
 
+    public boolean setStrength(String name, double strength) {
+        Jumppad pad = jumppads.get(name.toLowerCase());
+        if (pad == null) return false;
+        pad.setStrength(strength);
+        saveJumppads();
+        return true;
+    }
+
+    public boolean setTarget(String name, Location loc) {
+        Jumppad pad = jumppads.get(name.toLowerCase());
+        if (pad == null) return false;
+        if (loc.getWorld() == null) return false;
+        pad.setTarget(loc.getWorld().getName(), loc.getX(), loc.getY(), loc.getZ());
+        saveJumppads();
+        return true;
+    }
+
+    public boolean clearTarget(String name) {
+        Jumppad pad = jumppads.get(name.toLowerCase());
+        if (pad == null) return false;
+        pad.clearTarget();
+        saveJumppads();
+        return true;
+    }
+
     public Jumppad getJumppadAt(Location loc) {
         String padKey = blockIndex.get(blockKey(loc));
         return padKey == null ? null : jumppads.get(padKey);
@@ -78,6 +104,41 @@ public final class JumppadManager {
 
     public Collection<Jumppad> getAll() {
         return jumppads.values();
+    }
+
+    /**
+     * Calculates the launch velocity required to reach the target coordinates from
+     * the player's current position, using Minecraft physics simulation.
+     *
+     * Uses the pad's velY as the vertical launch speed. The horizontal components are
+     * derived by computing the time of flight to the target's Y level and back-calculating
+     * the required X/Z velocities accounting for Minecraft's 0.98 drag factor.
+     */
+    public static Vector calculateVelocityToTarget(Location from, double velY,
+                                                   double targetX, double targetY, double targetZ) {
+        double targetDy = targetY - from.getY();
+        double vy = velY;
+        double y  = 0.0;
+        int ticks = 1;
+
+        // Simulate vertical arc; stop when descending and at or past target Y
+        for (int t = 1; t <= 200; t++) {
+            y  += vy;
+            vy  = (vy - 0.08) * 0.98;
+            ticks = t;
+            if (vy < 0 && y <= targetDy) break;
+        }
+
+        // Horizontal displacement sum with drag: x = vx0 * (1 - 0.98^n) / 0.02
+        // => vx0 = dx * 0.02 / (1 - 0.98^n)
+        double drag   = Math.pow(0.98, ticks);
+        double factor = (1.0 - drag) / 0.02;
+        if (factor < 0.01) factor = 0.01; // guard against near-zero
+
+        double dx = targetX - from.getX();
+        double dz = targetZ - from.getZ();
+
+        return new Vector(dx / factor, velY, dz / factor);
     }
 
     public void loadJumppads() {
@@ -96,6 +157,16 @@ public final class JumppadManager {
                 pad.addBlockKey(key);
                 blockIndex.put(key, name.toLowerCase());
             }
+            // Load optional target location
+            if (entry.contains("target.world")) {
+                String tw = entry.getString("target.world");
+                if (tw != null && !tw.isEmpty()) {
+                    double tx = entry.getDouble("target.x");
+                    double ty = entry.getDouble("target.y");
+                    double tz = entry.getDouble("target.z");
+                    pad.setTarget(tw, tx, ty, tz);
+                }
+            }
             jumppads.put(name.toLowerCase(), pad);
         }
     }
@@ -108,6 +179,12 @@ public final class JumppadManager {
             plugin.getConfig().set(path + ".vel-y", pad.getVelY());
             plugin.getConfig().set(path + ".vel-z", pad.getVelZ());
             plugin.getConfig().set(path + ".blocks", new ArrayList<>(pad.getBlockKeys()));
+            if (pad.hasTarget()) {
+                plugin.getConfig().set(path + ".target.world", pad.getTargetWorld());
+                plugin.getConfig().set(path + ".target.x",     pad.getTargetX());
+                plugin.getConfig().set(path + ".target.y",     pad.getTargetY());
+                plugin.getConfig().set(path + ".target.z",     pad.getTargetZ());
+            }
         }
         plugin.saveConfig();
     }

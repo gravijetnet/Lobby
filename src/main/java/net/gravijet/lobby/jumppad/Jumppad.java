@@ -12,6 +12,13 @@ public final class Jumppad {
     private double velY;
     private double velZ;
 
+    // Optional target landing location
+    private boolean hasTarget  = false;
+    private String  targetWorld;
+    private double  targetX;
+    private double  targetY;
+    private double  targetZ;
+
     Jumppad(String name, double velX, double velY, double velZ) {
         this.name = name;
         this.velX = velX;
@@ -27,6 +34,12 @@ public final class Jumppad {
     public double      getVelY()      { return velY; }
     public double      getVelZ()      { return velZ; }
 
+    public boolean hasTarget()    { return hasTarget; }
+    public String  getTargetWorld() { return targetWorld; }
+    public double  getTargetX()   { return targetX; }
+    public double  getTargetY()   { return targetY; }
+    public double  getTargetZ()   { return targetZ; }
+
     void addBlockKey(String key)    { blockKeys.add(key); }
     void removeBlockKey(String key) { blockKeys.remove(key); }
 
@@ -34,5 +47,23 @@ public final class Jumppad {
         this.velX = x;
         this.velY = y;
         this.velZ = z;
+    }
+
+    /** Sets the vertical launch strength (velY) while preserving X and Z. */
+    void setStrength(double strength) {
+        this.velY = strength;
+    }
+
+    void setTarget(String world, double x, double y, double z) {
+        this.targetWorld = world;
+        this.targetX     = x;
+        this.targetY     = y;
+        this.targetZ     = z;
+        this.hasTarget   = true;
+    }
+
+    void clearTarget() {
+        this.hasTarget   = false;
+        this.targetWorld = null;
     }
 }

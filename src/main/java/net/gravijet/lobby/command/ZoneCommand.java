@@ -55,6 +55,7 @@ public final class ZoneCommand implements CommandExecutor {
             case "clearperm":     handleClearPerm(sender, args);     break;
             case "setmessage":    handleSetMessage(sender, args);    break;
             case "setblockplace": handleSetBlockPlace(sender, args); break;
+            case "setflight":     handleSetFlight(sender, args);     break;
             default:              sendUsage(sender);                 break;
         }
         return true;
@@ -173,6 +174,7 @@ public final class ZoneCommand implements CommandExecutor {
             sender.sendMessage("§7Permission: §anone (open to all)");
         }
         sender.sendMessage("§7Block placement: §f" + (zone.isAllowBlockPlacement() ? "§aallowed" : "§cdenied"));
+        sender.sendMessage("§7Flight:          §f" + (zone.isAllowFlight() ? "§aallowed" : "§cdisabled"));
     }
 
     private void handleSetPerm(CommandSender sender, String[] args) {
@@ -216,6 +218,28 @@ public final class ZoneCommand implements CommandExecutor {
         }
     }
 
+    private void handleSetFlight(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage("§cUsage: /zone setflight <name> <true|false>");
+            return;
+        }
+        String val = args[2].toLowerCase();
+        boolean allow;
+        if (val.equals("true") || val.equals("yes") || val.equals("1")) {
+            allow = true;
+        } else if (val.equals("false") || val.equals("no") || val.equals("0")) {
+            allow = false;
+        } else {
+            sender.sendMessage("§cValue must be true or false.");
+            return;
+        }
+        if (zoneManager.setZoneAllowFlight(args[1], allow)) {
+            sender.sendMessage("§aZone §f'" + args[1] + "' §aflight set to: §f" + (allow ? "allowed" : "disabled"));
+        } else {
+            sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
+        }
+    }
+
     private void handleSetBlockPlace(CommandSender sender, String[] args) {
         if (args.length < 3) {
             sender.sendMessage("§cUsage: /zone setblockplace <name> <true|false>");
@@ -250,5 +274,6 @@ public final class ZoneCommand implements CommandExecutor {
         sender.sendMessage("§4● §c/zone clearperm <name> §7» §fRemove restriction");
         sender.sendMessage("§4● §c/zone setmessage <name> <msg...> §7» §fSet deny message");
         sender.sendMessage("§4● §c/zone setblockplace <name> <true|false> §7» §fBlock placement");
+        sender.sendMessage("§4● §c/zone setflight <name> <true|false> §7» §fAllow/disable flight");
     }
 }

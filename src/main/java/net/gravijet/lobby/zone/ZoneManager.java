@@ -144,6 +144,14 @@ public final class ZoneManager {
         return true;
     }
 
+    public boolean setZoneAllowFlight(String zoneName, boolean allow) {
+        Zone zone = zones.get(zoneName.toLowerCase());
+        if (zone == null) return false;
+        zone.setAllowFlight(allow);
+        saveAll();
+        return true;
+    }
+
     public boolean isInsideAnyZone(Location loc) {
         for (Zone zone : zones.values()) {
             if (zone.contains(loc)) return true;
@@ -173,6 +181,21 @@ public final class ZoneManager {
             if (zone.containsPoint(worldName, loc.getX(), loc.getY(), loc.getZ())) return zone;
         }
         return null;
+    }
+
+    /**
+     * Returns false if the player is inside any zone that disallows flight.
+     */
+    public boolean isFlightAllowedAt(Location loc) {
+        String worldName = loc.getWorld() != null ? loc.getWorld().getName() : null;
+        if (worldName == null) return true;
+        for (Zone zone : zones.values()) {
+            if (!zone.isAllowFlight()
+                    && zone.containsPoint(worldName, loc.getX(), loc.getY(), loc.getZ())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public ZoneSelectionSession getOrCreateSession(UUID playerUUID) {
@@ -299,6 +322,7 @@ public final class ZoneManager {
         }
 
         zone.setAllowBlockPlacement(sec.getBoolean("allow-block-placement", false));
+        zone.setAllowFlight(sec.getBoolean("allow-flight", true));
         return zone;
     }
 
@@ -317,5 +341,6 @@ public final class ZoneManager {
         }
         plugin.getConfig().set(path + ".deny-message", zone.getDenyMessage().replace("\n", "\\n"));
         plugin.getConfig().set(path + ".allow-block-placement", zone.isAllowBlockPlacement());
+        plugin.getConfig().set(path + ".allow-flight", zone.isAllowFlight());
     }
 }
