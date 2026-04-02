@@ -1,0 +1,15 @@
+# Zone configurations
+# Format:
+# zones:
+#   zone1:
+#     name: "Example Zone"
+#     world: "world"
+#     min-x: 0
+#     min-y: 0
+#     min-z: 0
+#     max-x: 10
+#     max-y: 10
+#     max-z: 10
+#     allow-flight: true
+#     allow-block-placement: false
+zones: {}

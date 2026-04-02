@@ -52,7 +52,7 @@ public class ServerSelectorManager {
                 if (itemSection != null) {
                     int slot = itemSection.getInt("slot", 0);
                     if (slot >= 0 && slot < size) {
-                        ItemStack menuItem = createMenuItem(itemSection);
+                        ItemStack menuItem = createMenuItem(itemSection, player);
                         if (menuItem != null) {
                             gui.setItem(slot, menuItem);
                         }
@@ -65,7 +65,7 @@ public class ServerSelectorManager {
         player.playSound(player.getLocation(), Sound.CHEST_OPEN, 1.0f, 1.0f);
     }
 
-    private ItemStack createMenuItem(ConfigurationSection itemSection) {
+    private ItemStack createMenuItem(ConfigurationSection itemSection, Player player) {
         String materialName = itemSection.getString("material", "STONE");
         Material material;
         try {
@@ -87,6 +87,10 @@ public class ServerSelectorManager {
             List<String> lore = new ArrayList<>();
             List<String> loreConfig = itemSection.getStringList("lore");
             for (String line : loreConfig) {
+                // Replace placeholders if PlaceholderAPI is available
+                if (plugin.hasPlaceholderAPI()) {
+                    line = me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, line);
+                }
                 lore.add(ChatColor.translateAlternateColorCodes('&', line));
             }
             meta.setLore(lore);

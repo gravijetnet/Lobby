@@ -18,71 +18,59 @@ visibility:
 
 # Server Selector Configuration
 server-selector:
-  # Default menu for all versions
   default:
-    title: "&cServer Selector"
+    title: '&cServer Selector'
     size: 27
     items:
-      ffa:
+      fastbuilder:
         slot: 10
-        material: IRON_AXE
-        name: "&cFFA"
+        material: SANDSTONE
+        name: '&cFastbuilder'
         lore:
-          - "&7Free for All PvP"
-          - "&7Click to connect!"
+          - ''
+          - '&7text'
+          - '&7hier'
+          - ''
+          - '&aClick to connect!'
+          - '&7%phoenix_server_online_Fastbuilder-1% currently playing'
         actions:
-          - "connect:FFA-1"
-      skywars:
-        slot: 11
-        material: GRASS
-        name: "&cSkywars"
-        lore:
-          - "&7Fight in the sky"
-          - "&7Click to connect!"
-        actions:
-          - "connect:Skywars-1"
-      practice_2:
+          - connect:Fastbuilder-1
+      practice:
         slot: 12
-        material: GOLDEN_SWORD
-        name: "&cPractice &7(1.9+)"
-        lore:
-          - "&7Practice PvP for 1.9+"
-          - "&7Click to connect!"
-        actions:
-          - "connect:Practice-2"
-      practice_1:
-        slot: 13
         material: DIAMOND_SWORD
-        name: "&cPractice &7(1.8)"
+        name: '&cPractice'
         lore:
-          - "&7Practice PvP for 1.8"
-          - "&7Click to connect!"
+          - ''
+          - '&7text'
+          - '&7hier'
+          - ''
+          - '&aClick to connect!'
+          - '&7%phoenix_server_online_Fastbuilder-1% currently playing'
         actions:
-          - "connect:Practice-1"
+          - connect:Practice-1
       letsknock:
         slot: 14
-        material: SANDSTONE
-        name: "&cLetsKnock"
+        material: STICK
+        name: '&cClutches'
         lore:
-          - "&7Knock players off platforms"
-          - "&7Click to connect!"
+          - ''
+          - '&7text'
+          - '&7hier'
+          - ''
+          - '&aClick to connect!'
+          - '&7%phoenix_server_online_Fastbuilder-1% currently playing'
         actions:
-          - "connect:LetsKnock-1"
-      gens:
-        slot: 15
-        material: IRON_PICKAXE
-        name: "&cGens"
-        lore:
-          - "&7Resource generation game"
-          - "&7Click to connect!"
-        actions:
-          - "connect:Gens-1"
-      bedwars:
+          - connect:Clutches-1
+      ffa:
         slot: 16
-        material: BED
-        name: "&cBedWars"
+        material: IRON_AXE
+        name: '&cFFA'
         lore:
-          - "&7Protect your bed!"
-          - "&7Click to connect!"
+          - ''
+          - '&7text'
+          - '&7hier'
+          - ''
+          - '&aClick to connect!'
+          - '&7%phoenix_server_online_Fastbuilder-1% currently playing'
         actions:
-          - "connect:BedWars-1"
+          - connect:FFA-1

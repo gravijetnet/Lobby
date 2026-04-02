@@ -1,0 +1,7 @@
+# Lobby Blocks placed by players
+# These blocks will be removed on server start/stop
+# Format:
+# blocks:
+#   - "world:0:64:0"
+#   - "world:10:65:-20"
+blocks: []

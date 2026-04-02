@@ -1,5 +1,6 @@
 package net.gravijet.lobby.listener;
 
+import net.gravijet.lobby.LobbyBlockManager;
 import net.gravijet.lobby.Main;
 import net.gravijet.lobby.zone.Zone;
 import net.gravijet.lobby.zone.ZoneManager;
@@ -28,6 +29,10 @@ import org.bukkit.event.player.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.util.Vector;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.Block;
+import org.bukkit.util.BlockIterator;
+import org.bukkit.Effect;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -38,14 +43,17 @@ public class LobbyListener implements Listener {
 
     private final Main plugin;
     private final ZoneManager zoneManager;
+    private final LobbyBlockManager lobbyBlockManager;
 
     private final Map<UUID, EnderPearl> enderButtPearls = new HashMap<>();
     private final Map<UUID, Location> lastPearlLoc = new HashMap<>();
     private final Map<Location, int[]> lobbyBlockTasks = new HashMap<>();
+    private static final double MAX_PEARL_SPEED = 4.0;
 
-    public LobbyListener(Main plugin, ZoneManager zoneManager) {
+    public LobbyListener(Main plugin, ZoneManager zoneManager, LobbyBlockManager lobbyBlockManager) {
         this.plugin = plugin;
         this.zoneManager = zoneManager;
+        this.lobbyBlockManager = lobbyBlockManager;
         Bukkit.getScheduler().runTaskTimer(plugin, this::tickEnderButt, 1L, 1L);
         Bukkit.getScheduler().runTaskTimer(plugin, this::tickHeightLimit, 1L, 4L);
     }
@@ -77,10 +85,58 @@ public class LobbyListener implements Listener {
                 lastPearlLoc.remove(uuid);
                 continue;
             }
-            Location loc = pearl.getLocation();
-            lastPearlLoc.put(uuid, loc.clone());
-            if (loc.getY() > 200) {
-                Location capped = loc.clone();
+
+            Location currentLoc = pearl.getLocation();
+            Location previousLoc = lastPearlLoc.get(uuid);
+
+            // Check for collision if we have previous location
+            if (previousLoc != null && !previousLoc.getWorld().equals(currentLoc.getWorld())) {
+                previousLoc = null;
+            }
+
+            boolean collisionDetected = false;
+
+            // Check pearl collision
+            if (previousLoc != null && previousLoc.distance(currentLoc) < 5.0) {
+                // Only check if distance is reasonable (prevents false positives on teleport)
+                if (hasSolidBlockBetween(previousLoc, currentLoc)) {
+                    collisionDetected = true;
+                }
+            }
+
+            // Check player collision if riding the pearl
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && player.isOnline() && pearl.getPassenger() != null) {
+                Location playerLoc = player.getLocation();
+                if (isPlayerInsideSolidBlock(playerLoc)) {
+                    collisionDetected = true;
+                }
+            }
+
+            if (collisionDetected) {
+                // Collision detected, remove the pearl
+                if (player != null && player.isOnline()) {
+                    player.eject();
+                    pearl.eject();
+                }
+                pearl.remove();
+                it.remove();
+                lastPearlLoc.remove(uuid);
+                continue;
+            }
+
+            // Limit speed to prevent phasing
+            Vector velocity = pearl.getVelocity();
+            double speed = velocity.length();
+            if (speed > MAX_PEARL_SPEED) { // Limit maximum speed
+                velocity.normalize().multiply(MAX_PEARL_SPEED);
+                pearl.setVelocity(velocity);
+            }
+
+            lastPearlLoc.put(uuid, currentLoc.clone());
+
+            if (currentLoc.getY() > 200) {
+                Location capped = currentLoc.clone();
                 capped.setY(200.0);
                 pearl.teleport(capped);
                 Vector vel = pearl.getVelocity();
@@ -103,6 +159,11 @@ public class LobbyListener implements Listener {
         plugin.setFlightPreference(player, !plugin.isFlightDisabledByUser(player));
         plugin.saveConfig();
         player.setScoreboard(Bukkit.getScoreboardManager().getNewScoreboard());
+
+        // Remove player from build mode when leaving
+        if (plugin.isInBuildMode(player)) {
+            plugin.setBuildMode(player, false);
+        }
     }
 
     @EventHandler
@@ -338,11 +399,21 @@ public class LobbyListener implements Listener {
             Bukkit.getScheduler().cancelTask(existing[0]);
             Bukkit.getScheduler().cancelTask(existing[1]);
         }
+
+        // Register block in lobby block manager
+        lobbyBlockManager.addLobbyBlock(loc);
+
         int t1 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (loc.getBlock().getType() == Material.SANDSTONE) loc.getBlock().setType(Material.REDSTONE_BLOCK);
+            Block block = loc.getBlock();
+            if (block.getType() == Material.SANDSTONE) {
+                block.setType(Material.REDSTONE_BLOCK);
+                // Activate Redstone signal
+                activateRedstoneSignal(block);
+            }
         }, 100L).getTaskId();
         int t2 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             lobbyBlockTasks.remove(loc);
+            lobbyBlockManager.removeLobbyBlock(loc);
             if (loc.getBlock().getType() == Material.REDSTONE_BLOCK) loc.getBlock().setType(Material.AIR);
         }, 140L).getTaskId();
         lobbyBlockTasks.put(loc, new int[]{t1, t2});
@@ -370,5 +441,110 @@ public class LobbyListener implements Listener {
 
     private boolean nameEquals(ItemStack item, String name) {
         return item.hasItemMeta() && name.equals(item.getItemMeta().getDisplayName());
+    }
+
+    private void activateRedstoneSignal(Block block) {
+        // REDSTONE_BLOCK is a strong power source (power level 15)
+        // Update the block and surrounding blocks to trigger redstone components
+        block.getState().update(true, true);
+
+        // Update all six adjacent blocks to ensure redstone components react
+        BlockFace[] faces = {BlockFace.UP, BlockFace.DOWN, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST};
+        for (BlockFace face : faces) {
+            Block relative = block.getRelative(face);
+            relative.getState().update(true, false);
+        }
+
+        // Optional: Play a sound effect
+        block.getWorld().playSound(block.getLocation(), org.bukkit.Sound.CLICK, 0.5f, 1.0f);
+
+        // Visual effect
+        block.getWorld().playEffect(block.getLocation(), Effect.MOBSPAWNER_FLAMES, 0, 16);
+    }
+
+    private boolean hasSolidBlockBetween(Location from, Location to) {
+        if (from == null || to == null || !from.getWorld().equals(to.getWorld())) {
+            return false;
+        }
+
+        double distance = from.distance(to);
+        if (distance < 0.1) {
+            return false; // Too close, no need to check
+        }
+
+        Vector direction = to.toVector().subtract(from.toVector()).normalize();
+        int maxDistance = (int) Math.ceil(distance) + 2;
+
+        // Use BlockIterator for ray casting
+        BlockIterator iterator = new BlockIterator(from.getWorld(), from.toVector(), direction, 0, maxDistance);
+
+        while (iterator.hasNext()) {
+            Block block = iterator.next();
+            Material type = block.getType();
+
+                        // Check if block is solid
+            if (isSolid(type)) {
+                return true; // Solid block found
+            }
+        }
+        return false;
+    }
+
+    private boolean isPassable(Material material) {
+        // List of materials that are technically solid but players can pass through
+        switch (material) {
+            case SIGN_POST:
+            case WALL_SIGN:
+            case SIGN:
+            case WOOD_PLATE:
+            case STONE_PLATE:
+            case IRON_PLATE:
+            case GOLD_PLATE:
+            case REDSTONE_TORCH_ON:
+            case REDSTONE_TORCH_OFF:
+            case TORCH:
+            case REDSTONE_WIRE:
+            case TRIPWIRE:
+            case TRIPWIRE_HOOK:
+            case RAILS:
+            case POWERED_RAIL:
+            case DETECTOR_RAIL:
+            case ACTIVATOR_RAIL:
+            case SAPLING:
+            case YELLOW_FLOWER:
+            case RED_ROSE:
+            case BROWN_MUSHROOM:
+            case RED_MUSHROOM:
+            case DEAD_BUSH:
+            case LONG_GRASS:
+            case VINE:
+            case WATER_LILY:
+            case SNOW:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private boolean isPlayerInsideSolidBlock(Location playerLoc) {
+        // Check the block at player's feet and head
+        Block feetBlock = playerLoc.getBlock();
+        Block headBlock = playerLoc.clone().add(0, 1, 0).getBlock();
+
+        return isSolid(feetBlock.getType()) || isSolid(headBlock.getType());
+    }
+
+    private boolean isSolid(Material material) {
+        if (material == Material.AIR || material == Material.WATER || material == Material.LAVA ||
+            material == Material.STATIONARY_WATER || material == Material.STATIONARY_LAVA) {
+            return false;
+        }
+
+        if (!material.isSolid()) {
+            return false;
+        }
+
+        // Check if it's passable
+        return !isPassable(material);
     }
 }

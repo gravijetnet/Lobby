@@ -1,0 +1,10 @@
+# Jumppad configurations
+# Format:
+# jumppads:
+#   jumppad1:
+#     strength: 1.2
+#     height: 1.0
+#     blocks:
+#       - "world:0:64:0"
+#       - "world:10:65:-20"
+jumppads: {}
