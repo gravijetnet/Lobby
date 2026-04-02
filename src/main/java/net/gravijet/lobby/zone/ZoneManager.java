@@ -300,12 +300,23 @@ public final class ZoneManager {
             return calculateCentroidKnockback(playerLoc, zone);
         }
 
-        double dx = playerLoc.getX() - nearestBoundary.getX();
-        double dy = playerLoc.getY() - nearestBoundary.getY();
-        double dz = playerLoc.getZ() - nearestBoundary.getZ();
+        // Determine if player is inside the zone
+        boolean playerInside = zone.contains(playerLoc);
 
-        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        double strength = 1.2;
+        double dx, dz;
+        if (playerInside) {
+            // Player is inside zone, push towards boundary (to exit)
+            dx = nearestBoundary.getX() - playerLoc.getX();
+            dz = nearestBoundary.getZ() - playerLoc.getZ();
+        } else {
+            // Player is outside zone, push away from boundary (back away)
+            dx = playerLoc.getX() - nearestBoundary.getX();
+            dz = playerLoc.getZ() - nearestBoundary.getZ();
+        }
+        double dy = playerLoc.getY() - nearestBoundary.getY();
+
+        double distance = Math.sqrt(dx * dx + dz * dz);
+        double strength = 1.5;
 
         if (distance > 0.01) {
             return new Vector((dx / distance) * strength, 0.3, (dz / distance) * strength);
@@ -314,7 +325,7 @@ public final class ZoneManager {
         return new Vector(0, 0.3, 0);
     }
 
-    private static Location findNearestBoundaryPoint(Location playerLoc, Zone zone) {
+    public static Location findNearestBoundaryPoint(Location playerLoc, Zone zone) {
         List<int[]> corners = zone.getCorners();
         if (corners.size() < 2) return null;
 
@@ -339,7 +350,7 @@ public final class ZoneManager {
         return nearest;
     }
 
-    private static Location closestPointOnSegment(Location a, Location b, Location p) {
+    public static Location closestPointOnSegment(Location a, Location b, Location p) {
         Vector ab = b.toVector().subtract(a.toVector());
         Vector ap = p.toVector().subtract(a.toVector());
         double t = ap.dot(ab) / ab.lengthSquared();
@@ -357,8 +368,22 @@ public final class ZoneManager {
         cx /= zone.getCorners().size();
         cz /= zone.getCorners().size();
 
-        double awayX = playerLoc.getX() - cx;
-        double awayZ = playerLoc.getZ() - cz;
+        // Determine if player is inside the zone
+        boolean playerInside = zone.contains(playerLoc);
+
+        double awayX, awayZ;
+        if (playerInside) {
+            // Player is inside zone, push towards centroid (which is inside)
+            // Actually pushing towards centroid would move player deeper, not good
+            // Instead push away from centroid to reach edge
+            awayX = playerLoc.getX() - cx;
+            awayZ = playerLoc.getZ() - cz;
+        } else {
+            // Player is outside zone, push away from centroid
+            awayX = playerLoc.getX() - cx;
+            awayZ = playerLoc.getZ() - cz;
+        }
+
         double len = Math.sqrt(awayX * awayX + awayZ * awayZ);
 
         return len > 0.01 ? new Vector(awayX / len * 0.8, 0.25, awayZ / len * 0.8) : new Vector(0, 0.3, 0);
