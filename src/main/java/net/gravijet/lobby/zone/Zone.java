@@ -20,7 +20,7 @@ public final class Zone {
     private boolean allowBlockPlacement;
     private boolean allowFlight = true;
 
-    private static final String DEFAULT_DENY_MESSAGE = "§cYou are not allowed to enter this area!";
+    private static final String DEFAULT_DENY_MESSAGE = "§cYou need permission {permission} to enter this area!";
 
     Zone(String name, String worldName, int minY, int maxY, List<int[]> corners) {
         this.name = name;
