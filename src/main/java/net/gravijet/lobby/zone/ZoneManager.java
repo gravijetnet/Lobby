@@ -30,28 +30,27 @@ public final class ZoneManager {
     private final Main plugin;
     private final Map<String, Zone> zones = new LinkedHashMap<>();
     private final Map<UUID, ZoneSelectionSession> sessions = new HashMap<>();
+    private ZoneConfigManager configManager;
     private int particleTaskId = -1;
 
     public ZoneManager(Main plugin) {
         this.plugin = plugin;
+        this.configManager = new ZoneConfigManager(plugin);
     }
 
     public void loadZones() {
         zones.clear();
-        ConfigurationSection root = plugin.getConfig().getConfigurationSection("zones");
-        if (root == null) return;
-        for (String name : root.getKeys(false)) {
-            ConfigurationSection sec = root.getConfigurationSection(name);
-            if (sec == null) continue;
-            Zone zone = deserializeZone(name, sec);
-            if (zone != null) zones.put(name.toLowerCase(), zone);
-        }
+        configManager.migrateFromMainConfig();
+        configManager.loadZones(this);
     }
 
     public void saveAll() {
-        plugin.getConfig().set("zones", null);
-        for (Zone zone : zones.values()) serializeZone(zone);
-        plugin.saveConfig();
+        configManager.saveZonesToConfig();
+    }
+
+    // Helper method to get zones map for ZoneConfigManager
+    public Map<String, Zone> getZonesMap() {
+        return zones;
     }
 
     public void startParticleTask() {
@@ -230,66 +229,8 @@ public final class ZoneManager {
         return loc.getWorld() != null && loc.getWorld().equals(player.getWorld());
     }
 
-    private Zone deserializeZone(String name, ConfigurationSection sec) {
-        String world = sec.getString("world");
-        if (world == null || world.isEmpty()) {
-            plugin.getLogger().warning("Zone '" + name + "' has no world — skipping.");
-            return null;
-        }
-
-        int minY = sec.getInt("minY", 0);
-        int maxY = sec.getInt("maxY", 256);
-
-        List<String> rawCorners = sec.getStringList("corners");
-        if (rawCorners.size() < 3) {
-            plugin.getLogger().warning("Zone '" + name + "' has fewer than 3 corners — skipping.");
-            return null;
-        }
-
-        List<int[]> corners = new ArrayList<>();
-        for (String raw : rawCorners) {
-            String[] parts = raw.split(",");
-            if (parts.length != 2) {
-                plugin.getLogger().warning("Zone '" + name + "': invalid corner '" + raw + "' — skipping.");
-                return null;
-            }
-            try {
-                corners.add(new int[]{Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim())});
-            } catch (NumberFormatException e) {
-                plugin.getLogger().warning("Zone '" + name + "': non-integer corner '" + raw + "' — skipping.");
-                return null;
-            }
-        }
-
-        Zone zone = new Zone(name, world, minY, maxY, corners);
-
-        String perm = sec.getString("required-permission");
-        zone.setRequiredPermission(perm);
-
-        String msg = sec.getString("deny-message", "");
-        if (!msg.isEmpty()) {
-            zone.setDenyMessage(ChatColor.translateAlternateColorCodes('&', msg.replace("\\n", "\n")));
-        }
-
-        zone.setAllowBlockPlacement(sec.getBoolean("allow-block-placement", false));
-        zone.setAllowFlight(sec.getBoolean("allow-flight", true));
-        return zone;
-    }
-
-    private void serializeZone(Zone zone) {
-        String path = "zones." + zone.getName();
-        plugin.getConfig().set(path + ".world", zone.getWorldName());
-        plugin.getConfig().set(path + ".minY", zone.getMinY());
-        plugin.getConfig().set(path + ".maxY", zone.getMaxY());
-
-        List<String> cs = new ArrayList<>();
-        for (int[] c : zone.getCorners()) cs.add(c[0] + "," + c[1]);
-        plugin.getConfig().set(path + ".corners", cs);
-
-        plugin.getConfig().set(path + ".required-permission", zone.getRequiredPermission());
-        plugin.getConfig().set(path + ".deny-message", zone.getDenyMessage().replace("\n", "\\n"));
-        plugin.getConfig().set(path + ".allow-block-placement", zone.isAllowBlockPlacement());
-        plugin.getConfig().set(path + ".allow-flight", zone.isAllowFlight());
+    public ZoneConfigManager getConfigManager() {
+        return configManager;
     }
 
     public static Vector calculateKnockbackVector(Player player, Zone zone) {

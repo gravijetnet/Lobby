@@ -35,6 +35,8 @@ public class Main extends JavaPlugin {
     private ServerSelectorManager serverSelectorManager;
     private ZoneManager zoneManager;
     private JumppadManager jumppadManager;
+    private VisibilityManager visibilityManager;
+    private LobbyBlockManager lobbyBlockManager;
     private boolean hasPlaceholderAPI = false;
 
     @Override
@@ -44,6 +46,9 @@ public class Main extends JavaPlugin {
         serverSelectorManager = new ServerSelectorManager(this);
         serverSelectorManager.loadConfig();
 
+        visibilityManager = new VisibilityManager(this);
+        visibilityManager.migrateFromMainConfig();
+
         zoneManager = new ZoneManager(this);
         zoneManager.loadZones();
         zoneManager.startParticleTask();
@@ -51,10 +56,12 @@ public class Main extends JavaPlugin {
         jumppadManager = new JumppadManager(this);
         jumppadManager.loadJumppads();
 
+        lobbyBlockManager = new LobbyBlockManager(this);
+
         getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
 
         GetSpeedCookieCommand cookieCommand = new GetSpeedCookieCommand(this);
-        getServer().getPluginManager().registerEvents(new LobbyListener(this, zoneManager), this);
+        getServer().getPluginManager().registerEvents(new LobbyListener(this, zoneManager, lobbyBlockManager), this);
         getServer().getPluginManager().registerEvents(new ZoneListener(this, zoneManager), this);
         getServer().getPluginManager().registerEvents(new JumppadListener(this, jumppadManager), this);
         getServer().getPluginManager().registerEvents(new SpeedCookieListener(this, cookieCommand), this);
@@ -94,6 +101,11 @@ public class Main extends JavaPlugin {
             getConfig().set("players." + player.getUniqueId() + ".prefers-flight", prefersFlight);
         }
         saveConfig();
+
+        // Remove all lobby blocks on disable
+        if (lobbyBlockManager != null) {
+            lobbyBlockManager.removeAllLobbyBlocks();
+        }
     }
 
     public void setupWorld(World world) {
@@ -104,20 +116,16 @@ public class Main extends JavaPlugin {
     }
 
     public void setupPlayer(Player player) {
-        if (isInBuildMode(player)) {
-            player.setGameMode(GameMode.CREATIVE);
-        } else {
-            player.setGameMode(GameMode.SURVIVAL);
-        }
+        // Ensure player is not in build mode when joining
+        buildModePlayers.remove(player.getUniqueId());
 
+        player.setGameMode(GameMode.SURVIVAL);
         player.setHealth(20.0);
         player.setFoodLevel(20);
         player.setSaturation(20f);
         player.getInventory().clear();
 
-        if (!isInBuildMode(player)) {
-            setupInventory(player);
-        }
+        setupInventory(player);
 
         updatePlayerVisibility(player);
         updateScoreboard(player);
@@ -174,7 +182,7 @@ public class Main extends JavaPlugin {
     }
 
     public void updateVisibilityItem(Player player) {
-        String visibility = getConfig().getString("players." + player.getUniqueId() + ".visibility", "ALL");
+        String visibility = visibilityManager.getPlayerVisibility(player.getUniqueId());
 
         short dyeDamage;
         String displayName;
@@ -205,7 +213,7 @@ public class Main extends JavaPlugin {
     }
 
     public void updatePlayerVisibility(Player player) {
-        String visibility = getConfig().getString("players." + player.getUniqueId() + ".visibility", "ALL");
+        String visibility = visibilityManager.getPlayerVisibility(player.getUniqueId());
         String vipPerm = getConfig().getString("visibility.vip-permission", "lobby.visibility.vip");
         String staffPerm = getConfig().getString("visibility.staff-permission", "lobby.visibility.staff");
 
@@ -230,7 +238,7 @@ public class Main extends JavaPlugin {
     }
 
     public void cycleVisibilityMode(Player player) {
-        String current = getConfig().getString("players." + player.getUniqueId() + ".visibility", "ALL");
+        String current = visibilityManager.getPlayerVisibility(player.getUniqueId());
         String next;
         switch (current) {
             case "ALL":
@@ -247,8 +255,7 @@ public class Main extends JavaPlugin {
                 break;
         }
 
-        getConfig().set("players." + player.getUniqueId() + ".visibility", next);
-        saveConfig();
+        visibilityManager.setPlayerVisibility(player.getUniqueId(), next);
 
         updateVisibilityItem(player);
         updatePlayerVisibility(player);
@@ -272,15 +279,6 @@ public class Main extends JavaPlugin {
         } catch (NumberFormatException ignored) {}
 
         int score = 15;
-        objective.getScore("§7§m-------------------").setScore(score--);
-        objective.getScore("§8» §cRank: §6" + getPlaceholder(player, "%phoenix_player_real_rank%")).setScore(score--);
-        objective.getScore("§8» §cPlayers: §6" + getPlaceholder(player, "%phoenix_server_global_online%")).setScore(score--);
-        objective.getScore("§8» §cCoins: §6" + getPlaceholder(player, "%pxcosmetics_player_coins%")).setScore(score--);
-        objective.getScore("§8» §cLevel: §6" + getPlaceholder(player, "%phoenix_player_level_displayname%")).setScore(score--);
-        objective.getScore("§8» §cPlaytime: §6" + playtime + "h").setScore(score--);
-        objective.getScore("§f ").setScore(score--);
-        objective.getScore("§7§oexample.invalid").setScore(score--);
-        objective.getScore("§7§o§m-------------------").setScore(score--);
         player.setScoreboard(board);
     }
 
@@ -385,16 +383,25 @@ public class Main extends JavaPlugin {
         return jumppadManager;
     }
 
+    public VisibilityManager getVisibilityManager() {
+        return visibilityManager;
+    }
+
     public void reloadPluginConfig() {
         reloadConfig();
 
         serverSelectorManager.loadConfig();
+        visibilityManager.reloadVisibilityConfig();
 
         zoneManager.stopParticleTask();
         zoneManager.loadZones();
         zoneManager.startParticleTask();
 
         jumppadManager.loadJumppads();
+
+        if (lobbyBlockManager != null) {
+            lobbyBlockManager.reloadLobbyBlocksConfig();
+        }
 
         for (World world : Bukkit.getWorlds()) {
             setupWorld(world);
@@ -416,5 +423,9 @@ public class Main extends JavaPlugin {
             return me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, placeholder);
         }
         return placeholder;
+    }
+
+    public boolean hasPlaceholderAPI() {
+        return hasPlaceholderAPI;
     }
 }

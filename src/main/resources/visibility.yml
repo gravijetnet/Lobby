@@ -1,0 +1,4 @@
+# Player visibility settings
+# This file stores each player's visibility preference.
+# Possible values: ALL, VIP, STAFF, NONE
+players: {}

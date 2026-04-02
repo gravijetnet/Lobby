@@ -17,9 +17,11 @@ public final class JumppadManager {
     private final Main plugin;
     private final Map<String, Jumppad> jumppads = new LinkedHashMap<>();
     private final Map<String, String> blockIndex = new HashMap<>();
+    private JumppadConfigManager configManager;
 
     public JumppadManager(Main plugin) {
         this.plugin = plugin;
+        this.configManager = new JumppadConfigManager(plugin);
     }
 
     private String blockKey(Location loc) {
@@ -98,32 +100,24 @@ public final class JumppadManager {
     }
 
     public void loadJumppads() {
-        jumppads.clear();
-        blockIndex.clear();
-        ConfigurationSection sec = plugin.getConfig().getConfigurationSection("jumppads");
-        if (sec == null) return;
-        for (String name : sec.getKeys(false)) {
-            ConfigurationSection entry = sec.getConfigurationSection(name);
-            if (entry == null) continue;
-            double strength = entry.getDouble("strength", 1.2);
-            double height = entry.getDouble("height", 1.0);
-            Jumppad pad = new Jumppad(name, strength, height);
-            for (String key : entry.getStringList("blocks")) {
-                pad.addBlockKey(key);
-                blockIndex.put(key, name.toLowerCase());
-            }
-            jumppads.put(name.toLowerCase(), pad);
-        }
+        configManager.migrateFromMainConfig();
+        configManager.loadJumppads(this);
     }
 
     public void saveJumppads() {
-        plugin.getConfig().set("jumppads", null);
-        for (Jumppad pad : jumppads.values()) {
-            String path = "jumppads." + pad.getName();
-            plugin.getConfig().set(path + ".strength", pad.getBaseStrength());
-            plugin.getConfig().set(path + ".height", pad.getHeightMultiplier());
-            plugin.getConfig().set(path + ".blocks", new ArrayList<>(pad.getBlockKeys()));
-        }
-        plugin.saveConfig();
+        configManager.saveJumppadsToConfig(this);
+    }
+
+    // Helper methods for config manager access
+    public Map<String, Jumppad> getJumppadsMap() {
+        return jumppads;
+    }
+
+    public Map<String, String> getBlockIndex() {
+        return blockIndex;
+    }
+
+    public JumppadConfigManager getConfigManager() {
+        return configManager;
     }
 }
