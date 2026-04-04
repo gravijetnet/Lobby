@@ -268,17 +268,59 @@ public class Main extends JavaPlugin {
     }
 
     public void updateScoreboard(Player player) {
-        Scoreboard board = scoreboardManager.getNewScoreboard();
-        Objective objective = board.registerNewObjective("lobby", "dummy");
-        objective.setDisplayName("§c§lexample.invalid");
-        objective.setDisplaySlot(DisplaySlot.SIDEBAR);
+        // Verwende bestehendes Scoreboard oder erstelle neues
+        Scoreboard board = player.getScoreboard();
+        if (board == null || board.getObjective("lobby") == null) {
+            board = scoreboardManager.getNewScoreboard();
+        }
 
-        int playtime = 0;
+        Objective objective = board.getObjective("lobby");
+        if (objective == null) {
+            objective = board.registerNewObjective("lobby", "dummy");
+            objective.setDisplayName("§c§lexample.invalid");
+            objective.setDisplaySlot(DisplaySlot.SIDEBAR);
+        }
+
+        // Lösche alle alten Scores
+        for (String entry : board.getEntries()) {
+            board.resetScores(entry);
+        }
+
+        // Berechne Playtime
+        int playtimeHours = 0;
         try {
-            playtime = Integer.parseInt(getPlaceholder(player, "%phoenix_player_playtime_seconds%")) / 3600;
+            int playtimeSeconds = Integer.parseInt(getPlaceholder(player, "%phoenix_player_playtime_seconds%"));
+            playtimeHours = playtimeSeconds / 3600;
         } catch (NumberFormatException ignored) {}
 
-        int score = 15;
+        // Hole andere Platzhalterdaten
+        String coins = getPlaceholder(player, "%vault_eco_balance_formatted%");
+        String rank = getPlaceholder(player, "%luckperms_prefix%");
+
+        // Aktualisiere Score-Zeilen (höhere Score-Werte werden zuerst angezeigt)
+        int score = 8;  // Startwert
+
+        objective.getScore("§7§m----------------").setScore(score--);
+        objective.getScore("§fRank:").setScore(score--);
+
+        String rankDisplay = (rank == null || rank.isEmpty() || rank.equals("%luckperms_prefix%")) ? "§7Player" : rank;
+        if (rankDisplay.length() > 16) {
+            rankDisplay = rankDisplay.substring(0, 16);
+        }
+        objective.getScore("§e" + rankDisplay).setScore(score--);
+
+        objective.getScore("§fCoins:").setScore(score--);
+
+        String coinsDisplay = (coins == null || coins.isEmpty() || coins.equals("%vault_eco_balance_formatted%")) ? "0" : coins;
+        if (coinsDisplay.length() > 16) {
+            coinsDisplay = coinsDisplay.substring(0, 16);
+        }
+        objective.getScore("§6" + coinsDisplay).setScore(score--);
+
+        objective.getScore("§fPlaytime:").setScore(score--);
+        objective.getScore("§a" + playtimeHours + "h").setScore(score--);
+        objective.getScore("§7§m----------------").setScore(score--);
+
         player.setScoreboard(board);
     }
 
@@ -422,7 +464,18 @@ public class Main extends JavaPlugin {
         if (hasPlaceholderAPI) {
             return me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, placeholder);
         }
-        return placeholder;
+
+        // Fallback-Werte wenn PlaceholderAPI nicht verfügbar ist
+        switch (placeholder) {
+            case "%phoenix_player_playtime_seconds%":
+                return "0";
+            case "%vault_eco_balance_formatted%":
+                return "0";
+            case "%luckperms_prefix%":
+                return "Player";
+            default:
+                return placeholder;
+        }
     }
 
     public boolean hasPlaceholderAPI() {
