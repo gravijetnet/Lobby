@@ -257,13 +257,13 @@ public final class ZoneManager {
         double dy = playerLoc.getY() - nearestBoundary.getY();
 
         double distance = Math.sqrt(dx * dx + dz * dz);
-        double strength = 1.5;
+        double strength = 2.0;
 
         if (distance > 0.01) {
-            return new Vector((dx / distance) * strength, 0.3, (dz / distance) * strength);
+            return new Vector((dx / distance) * strength, 0.5, (dz / distance) * strength);
         }
 
-        return new Vector(0, 0.3, 0);
+        return new Vector(0, 0.5, 0);
     }
 
     public static Location findNearestBoundaryPoint(Location playerLoc, Zone zone) {
@@ -327,6 +327,6 @@ public final class ZoneManager {
 
         double len = Math.sqrt(awayX * awayX + awayZ * awayZ);
 
-        return len > 0.01 ? new Vector(awayX / len * 0.8, 0.25, awayZ / len * 0.8) : new Vector(0, 0.3, 0);
+        return len > 0.01 ? new Vector(awayX / len * 1.2, 0.5, awayZ / len * 1.2) : new Vector(0, 0.5, 0);
     }
 }

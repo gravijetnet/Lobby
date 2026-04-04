@@ -48,7 +48,7 @@ public class LobbyListener implements Listener {
     private final Map<UUID, EnderPearl> enderButtPearls = new HashMap<>();
     private final Map<UUID, Location> lastPearlLoc = new HashMap<>();
     private final Map<Location, int[]> lobbyBlockTasks = new HashMap<>();
-    private static final double MAX_PEARL_SPEED = 4.0;
+    private static final double MAX_PEARL_SPEED = 3.0;
 
     public LobbyListener(Main plugin, ZoneManager zoneManager, LobbyBlockManager lobbyBlockManager) {
         this.plugin = plugin;
@@ -97,10 +97,17 @@ public class LobbyListener implements Listener {
             boolean collisionDetected = false;
 
             // Check pearl collision
-            if (previousLoc != null && previousLoc.distance(currentLoc) < 5.0) {
+            if (previousLoc != null) {
+                double distance = previousLoc.distance(currentLoc);
                 // Only check if distance is reasonable (prevents false positives on teleport)
-                if (hasSolidBlockBetween(previousLoc, currentLoc)) {
-                    collisionDetected = true;
+                if (distance < 10.0) {
+                    if (hasSolidBlockBetween(previousLoc, currentLoc)) {
+                        collisionDetected = true;
+                    }
+                }
+                // If distance is too large (teleport), reset previous location
+                if (distance > 10.0) {
+                    previousLoc = null;
                 }
             }
 
@@ -455,10 +462,7 @@ public class LobbyListener implements Listener {
             relative.getState().update(true, false);
         }
 
-        // Optional: Play a sound effect
-        block.getWorld().playSound(block.getLocation(), org.bukkit.Sound.CLICK, 0.5f, 1.0f);
-
-        // Visual effect
+        // Visual effect only - no sound
         block.getWorld().playEffect(block.getLocation(), Effect.MOBSPAWNER_FLAMES, 0, 16);
     }
 
@@ -475,7 +479,7 @@ public class LobbyListener implements Listener {
         Vector direction = to.toVector().subtract(from.toVector()).normalize();
         int maxDistance = (int) Math.ceil(distance) + 2;
 
-        // Use BlockIterator for ray casting
+        // Use BlockIterator for ray casting with smaller step size
         BlockIterator iterator = new BlockIterator(from.getWorld(), from.toVector(), direction, 0, maxDistance);
 
         while (iterator.hasNext()) {
@@ -487,6 +491,21 @@ public class LobbyListener implements Listener {
                 return true; // Solid block found
             }
         }
+
+        // Additional check: sample points along the line at higher resolution
+        int steps = (int) (distance * 4); // 4 samples per block
+        if (steps > 20) steps = 20; // Cap to prevent performance issues
+        if (steps < 2) steps = 2;
+
+        for (int i = 1; i < steps; i++) {
+            double t = (double) i / steps;
+            Location sampled = from.clone().add(direction.clone().multiply(distance * t));
+            Block block = sampled.getBlock();
+            if (isSolid(block.getType())) {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -520,18 +539,60 @@ public class LobbyListener implements Listener {
             case VINE:
             case WATER_LILY:
             case SNOW:
+            case CARPET:
+            case LADDER:
+            case WATER:
+            case LAVA:
+            case STATIONARY_WATER:
+            case STATIONARY_LAVA:
+            case WEB:
+            case ENDER_PORTAL:
+            case ENDER_PORTAL_FRAME:
+            case PORTAL:
+            case AIR:
+            case IRON_FENCE:
                 return true;
             default:
+                // Check if it's a slab, stair, or other half-block
+                String name = material.name();
+                if (name.contains("SLAB") || name.contains("STEP") || name.contains("STAIRS")) {
+                    return true;
+                }
+                // Check for glass panes and thin glass
+                if (name.contains("GLASS_PANE") || name.contains("THIN_GLASS")) {
+                    return true;
+                }
                 return false;
         }
     }
 
     private boolean isPlayerInsideSolidBlock(Location playerLoc) {
-        // Check the block at player's feet and head
-        Block feetBlock = playerLoc.getBlock();
-        Block headBlock = playerLoc.clone().add(0, 1, 0).getBlock();
+        // Check multiple points around player's hitbox (0.6x0.6x1.8)
+        double halfWidth = 0.3;
+        double height = 1.8;
 
-        return isSolid(feetBlock.getType()) || isSolid(headBlock.getType());
+        // Check feet and head first (quick check)
+        Block feetBlock = playerLoc.getBlock();
+        Block headBlock = playerLoc.clone().add(0, height - 0.1, 0).getBlock();
+        if (isSolid(feetBlock.getType()) || isSolid(headBlock.getType())) {
+            return true;
+        }
+
+        // Check 8 points around the player's hitbox
+        double[] offsets = {-halfWidth, halfWidth};
+        for (double dx : offsets) {
+            for (double dz : offsets) {
+                for (double dy = 0; dy <= height; dy += 0.5) {
+                    Location checkLoc = playerLoc.clone().add(dx, dy, dz);
+                    Block block = checkLoc.getBlock();
+                    if (isSolid(block.getType())) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     private boolean isSolid(Material material) {
