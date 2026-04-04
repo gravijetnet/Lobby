@@ -45,10 +45,10 @@ server-selector:
           - '&7hier'
           - ''
           - '&aClick to connect!'
-          - '&7%phoenix_server_online_Fastbuilder-1% currently playing'
+          - '&7%phoenix_server_online_Practice-1% currently playing'
         actions:
           - connect:Practice-1
-      letsknock:
+      clutches:
         slot: 14
         material: STICK
         name: '&cClutches'
@@ -58,7 +58,7 @@ server-selector:
           - '&7hier'
           - ''
           - '&aClick to connect!'
-          - '&7%phoenix_server_online_Fastbuilder-1% currently playing'
+          - '&7%phoenix_server_online_Clutches-1% currently playing'
         actions:
           - connect:Clutches-1
       ffa:
@@ -71,6 +71,6 @@ server-selector:
           - '&7hier'
           - ''
           - '&aClick to connect!'
-          - '&7%phoenix_server_online_Fastbuilder-1% currently playing'
+          - '&7%phoenix_server_online_FFA-1% currently playing'
         actions:
           - connect:FFA-1
