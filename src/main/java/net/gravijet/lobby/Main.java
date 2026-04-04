@@ -268,60 +268,44 @@ public class Main extends JavaPlugin {
     }
 
     public void updateScoreboard(Player player) {
-        // Verwende bestehendes Scoreboard oder erstelle neues
         Scoreboard board = player.getScoreboard();
-        if (board == null || board.getObjective("lobby") == null) {
+        Objective objective = board.getObjective(DisplaySlot.SIDEBAR);
+
+        // If the player doesn't have our scoreboard, or the objective is not ours, create and assign it.
+        if (objective == null || !objective.getName().equals("lobby")) {
             board = scoreboardManager.getNewScoreboard();
-        }
-
-        Objective objective = board.getObjective("lobby");
-        if (objective == null) {
             objective = board.registerNewObjective("lobby", "dummy");
-            objective.setDisplayName("§c§lGravijet.net");
             objective.setDisplaySlot(DisplaySlot.SIDEBAR);
+            player.setScoreboard(board);
         }
 
-        // Lösche alle alten Scores
+        objective.setDisplayName("§c§lGravijet.net");
+
+        // Clear all old scores to prevent duplicates and remove old lines.
         for (String entry : board.getEntries()) {
             board.resetScores(entry);
         }
 
-        // Berechne Playtime
-        int playtimeHours = 0;
+        int playtime = 0;
         try {
-            int playtimeSeconds = Integer.parseInt(getPlaceholder(player, "%phoenix_player_playtime_seconds%"));
-            playtimeHours = playtimeSeconds / 3600;
-        } catch (NumberFormatException ignored) {}
-
-        // Hole andere Platzhalterdaten
-        String coins = getPlaceholder(player, "%vault_eco_balance_formatted%");
-        String rank = getPlaceholder(player, "%luckperms_prefix%");
-
-        // Aktualisiere Score-Zeilen (höhere Score-Werte werden zuerst angezeigt)
-        int score = 8;  // Startwert
-
-        objective.getScore("§7§m----------------").setScore(score--);
-        objective.getScore("§fRank:").setScore(score--);
-
-        String rankDisplay = (rank == null || rank.isEmpty() || rank.equals("%luckperms_prefix%")) ? "§7Player" : rank;
-        if (rankDisplay.length() > 16) {
-            rankDisplay = rankDisplay.substring(0, 16);
+            String playtimeValue = getPlaceholder(player, "%phoenix_player_playtime_seconds%");
+            if (playtimeValue != null && !playtimeValue.startsWith("%")) {
+                playtime = Integer.parseInt(playtimeValue) / 3600;
+            }
+        } catch (NumberFormatException ignored) {
+            // Ignored if placeholder is not a number
         }
-        objective.getScore("§e" + rankDisplay).setScore(score--);
 
-        objective.getScore("§fCoins:").setScore(score--);
-
-        String coinsDisplay = (coins == null || coins.isEmpty() || coins.equals("%vault_eco_balance_formatted%")) ? "0" : coins;
-        if (coinsDisplay.length() > 16) {
-            coinsDisplay = coinsDisplay.substring(0, 16);
-        }
-        objective.getScore("§6" + coinsDisplay).setScore(score--);
-
-        objective.getScore("§fPlaytime:").setScore(score--);
-        objective.getScore("§a" + playtimeHours + "h").setScore(score--);
-        objective.getScore("§7§m----------------").setScore(score--);
-
-        player.setScoreboard(board);
+        int score = 15;
+        objective.getScore("§7§m-------------------").setScore(score--);
+        objective.getScore("§8» §cRank: §6" + getPlaceholder(player, "%phoenix_player_real_rank%")).setScore(score--);
+        objective.getScore("§8» §cPlayers: §6" + getPlaceholder(player, "%phoenix_server_global_online%")).setScore(score--);
+        objective.getScore("§8» §cCoins: §6" + getPlaceholder(player, "%pxcosmetics_player_coins%")).setScore(score--);
+        objective.getScore("§8» §cLevel: §6" + getPlaceholder(player, "%phoenix_player_level_displayname%")).setScore(score--);
+        objective.getScore("§8» §cPlaytime: §6" + playtime + "h").setScore(score--);
+        objective.getScore("§f ").setScore(score--); // Blank line
+        objective.getScore("§7§ogravijet.net").setScore(score--);
+        objective.getScore("§7§o§m-------------------").setScore(score--);
     }
 
     public boolean isFlightDisabledByUser(Player player) {
@@ -470,9 +454,15 @@ public class Main extends JavaPlugin {
             case "%phoenix_player_playtime_seconds%":
                 return "0";
             case "%vault_eco_balance_formatted%":
+            case "%pxcosmetics_player_coins%":
                 return "0";
             case "%luckperms_prefix%":
+            case "%phoenix_player_real_rank%":
                 return "Player";
+            case "%phoenix_server_global_online%":
+                return String.valueOf(Bukkit.getOnlinePlayers().size());
+            case "%phoenix_player_level_displayname%":
+                return "1";
             default:
                 return placeholder;
         }
