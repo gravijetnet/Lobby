@@ -191,11 +191,6 @@ public class LobbyListener implements Listener {
         ItemStack item = event.getItemInHand();
         Block placed = event.getBlockPlaced();
         if (isLobbyBlock(item)) {
-            Zone zone = zoneManager.getZoneAt(placed.getLocation());
-            if (zone != null && !zone.isAllowBlockPlacement()) {
-                event.setCancelled(true);
-                return;
-            }
             event.setCancelled(false);
             scheduleLobbyBlock(placed.getLocation());
             Bukkit.getScheduler().runTask(plugin, () -> {
