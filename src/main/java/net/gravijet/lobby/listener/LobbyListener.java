@@ -430,7 +430,7 @@ public class LobbyListener implements Listener {
     }
 
     private boolean isLobbyBlock(ItemStack item) {
-        return item != null && item.getType() == Material.DIAMOND_BLOCK && item.hasItemMeta() && "§cLobby Blocks".equals(item.getItemMeta().getDisplayName());
+        return item != null && (item.getType() == Material.SANDSTONE || item.getType() == Material.DIAMOND_BLOCK) && item.hasItemMeta() && "§cLobby Blocks".equals(item.getItemMeta().getDisplayName());
     }
 
     private boolean isLobbyItem(ItemStack item) {
