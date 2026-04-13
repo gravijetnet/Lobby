@@ -192,7 +192,7 @@ public class LobbyListener implements Listener {
         Block placed = event.getBlockPlaced();
         if (isLobbyBlock(item)) {
             event.setCancelled(false);
-            scheduleLobbyBlock(placed.getLocation());
+            scheduleLobbyBlock(placed.getLocation(), item.getType());
             Bukkit.getScheduler().runTask(plugin, () -> {
                 ItemStack slot4 = player.getInventory().getItem(4);
                 if (slot4 != null && isLobbyBlock(slot4)) {
@@ -392,30 +392,39 @@ public class LobbyListener implements Listener {
         }
     }
 
-    private void scheduleLobbyBlock(Location loc) {
+    private void scheduleLobbyBlock(Location loc, Material originalType) {
         int[] existing = lobbyBlockTasks.remove(loc);
         if (existing != null) {
-            Bukkit.getScheduler().cancelTask(existing[0]);
-            Bukkit.getScheduler().cancelTask(existing[1]);
+            for (int id : existing) Bukkit.getScheduler().cancelTask(id);
         }
 
-        // Register block in lobby block manager
         lobbyBlockManager.addLobbyBlock(loc);
 
-        int firstChangeTicks = plugin.getConfig().getInt("lobby-blocks.first-change-ticks", 100);
-        int removeTicks = plugin.getConfig().getInt("lobby-blocks.remove-ticks", 140);
+        // Both types: sandstone for 5s (100t), then color block, then disappear after 2s (40t)
+        // Sandstone placement: sandstone → redstone block → air
+        // Diamond placement: immediately sandstone → emerald block → air
+        final Material colorBlock = (originalType == Material.SANDSTONE) ? Material.REDSTONE_BLOCK : Material.EMERALD_BLOCK;
+
+        if (originalType == Material.DIAMOND_BLOCK) {
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (loc.getBlock().getType() == Material.DIAMOND_BLOCK) {
+                    loc.getBlock().setType(Material.SANDSTONE);
+                }
+            });
+        }
 
         int t1 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            Block block = loc.getBlock();
-            if (block.getType() == Material.DIAMOND_BLOCK) {
-                block.setType(Material.SANDSTONE);
+            if (loc.getBlock().getType() == Material.SANDSTONE) {
+                loc.getBlock().setType(colorBlock);
             }
-        }, firstChangeTicks).getTaskId();
+        }, 100L).getTaskId();
+
         int t2 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             lobbyBlockTasks.remove(loc);
             lobbyBlockManager.removeLobbyBlock(loc);
-            if (loc.getBlock().getType() == Material.SANDSTONE) loc.getBlock().setType(Material.AIR);
-        }, removeTicks).getTaskId();
+            if (loc.getBlock().getType() == colorBlock) loc.getBlock().setType(Material.AIR);
+        }, 140L).getTaskId();
+
         lobbyBlockTasks.put(loc, new int[]{t1, t2});
     }
 
