@@ -1,8 +1,6 @@
 package net.gravijet.lobby;
 
 import net.gravijet.lobby.command.*;
-import net.gravijet.lobby.jumppad.JumppadListener;
-import net.gravijet.lobby.jumppad.JumppadManager;
 import net.gravijet.lobby.listener.LobbyListener;
 import net.gravijet.lobby.listener.SpeedCookieListener;
 import net.gravijet.lobby.selector.ServerSelectorManager;
@@ -34,7 +32,6 @@ public class Main extends JavaPlugin {
     private ScoreboardManager scoreboardManager;
     private ServerSelectorManager serverSelectorManager;
     private ZoneManager zoneManager;
-    private JumppadManager jumppadManager;
     private VisibilityManager visibilityManager;
     private LobbyBlockManager lobbyBlockManager;
     private boolean hasPlaceholderAPI = false;
@@ -42,6 +39,8 @@ public class Main extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        getConfig().options().copyDefaults(true);
+        saveConfig();
 
         serverSelectorManager = new ServerSelectorManager(this);
         serverSelectorManager.loadConfig();
@@ -53,9 +52,6 @@ public class Main extends JavaPlugin {
         zoneManager.loadZones();
         zoneManager.startParticleTask();
 
-        jumppadManager = new JumppadManager(this);
-        jumppadManager.loadJumppads();
-
         lobbyBlockManager = new LobbyBlockManager(this);
 
         getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
@@ -63,7 +59,6 @@ public class Main extends JavaPlugin {
         GetSpeedCookieCommand cookieCommand = new GetSpeedCookieCommand(this);
         getServer().getPluginManager().registerEvents(new LobbyListener(this, zoneManager, lobbyBlockManager), this);
         getServer().getPluginManager().registerEvents(new ZoneListener(this, zoneManager), this);
-        getServer().getPluginManager().registerEvents(new JumppadListener(this, jumppadManager), this);
         getServer().getPluginManager().registerEvents(new SpeedCookieListener(this, cookieCommand), this);
 
         getCommand("build").setExecutor(new BuildCommand(this));
@@ -72,7 +67,6 @@ public class Main extends JavaPlugin {
         getCommand("fly").setExecutor(new FlyCommand(this));
         getCommand("zone").setExecutor(new ZoneCommand(this, zoneManager));
         getCommand("lobbyreload").setExecutor(new ReloadCommand(this));
-        getCommand("jumppad").setExecutor(new JumppadCommand(this, jumppadManager));
         getCommand("getspeedcookie").setExecutor(cookieCommand);
 
         hasPlaceholderAPI = Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null;
@@ -405,10 +399,6 @@ public class Main extends JavaPlugin {
         return zoneManager;
     }
 
-    public JumppadManager getJumppadManager() {
-        return jumppadManager;
-    }
-
     public VisibilityManager getVisibilityManager() {
         return visibilityManager;
     }
@@ -422,8 +412,6 @@ public class Main extends JavaPlugin {
         zoneManager.stopParticleTask();
         zoneManager.loadZones();
         zoneManager.startParticleTask();
-
-        jumppadManager.loadJumppads();
 
         if (lobbyBlockManager != null) {
             lobbyBlockManager.reloadLobbyBlocksConfig();

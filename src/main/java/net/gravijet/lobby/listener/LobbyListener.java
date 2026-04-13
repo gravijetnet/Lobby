@@ -29,10 +29,7 @@ import org.bukkit.event.player.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.util.Vector;
-import org.bukkit.block.BlockFace;
-import org.bukkit.block.Block;
 import org.bukkit.util.BlockIterator;
-import org.bukkit.Effect;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -206,7 +203,7 @@ public class LobbyListener implements Listener {
                 if (slot4 != null && isLobbyBlock(slot4)) {
                     slot4.setAmount(64);
                 } else {
-                    ItemStack fresh = new ItemStack(Material.SANDSTONE, 64);
+                    ItemStack fresh = new ItemStack(Material.DIAMOND_BLOCK, 64);
                     ItemMeta meta = fresh.getItemMeta();
                     meta.setDisplayName("§cLobby Blocks");
                     fresh.setItemMeta(meta);
@@ -410,19 +407,20 @@ public class LobbyListener implements Listener {
         // Register block in lobby block manager
         lobbyBlockManager.addLobbyBlock(loc);
 
+        int firstChangeTicks = plugin.getConfig().getInt("lobby-blocks.first-change-ticks", 100);
+        int removeTicks = plugin.getConfig().getInt("lobby-blocks.remove-ticks", 140);
+
         int t1 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             Block block = loc.getBlock();
-            if (block.getType() == Material.SANDSTONE) {
-                block.setType(Material.REDSTONE_BLOCK);
-                // Activate Redstone signal
-                activateRedstoneSignal(block);
+            if (block.getType() == Material.DIAMOND_BLOCK) {
+                block.setType(Material.SANDSTONE);
             }
-        }, 100L).getTaskId();
+        }, firstChangeTicks).getTaskId();
         int t2 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             lobbyBlockTasks.remove(loc);
             lobbyBlockManager.removeLobbyBlock(loc);
-            if (loc.getBlock().getType() == Material.REDSTONE_BLOCK) loc.getBlock().setType(Material.AIR);
-        }, 140L).getTaskId();
+            if (loc.getBlock().getType() == Material.SANDSTONE) loc.getBlock().setType(Material.AIR);
+        }, removeTicks).getTaskId();
         lobbyBlockTasks.put(loc, new int[]{t1, t2});
     }
 
@@ -437,7 +435,7 @@ public class LobbyListener implements Listener {
     }
 
     private boolean isLobbyBlock(ItemStack item) {
-        return item != null && item.getType() == Material.SANDSTONE && item.hasItemMeta() && "§cLobby Blocks".equals(item.getItemMeta().getDisplayName());
+        return item != null && item.getType() == Material.DIAMOND_BLOCK && item.hasItemMeta() && "§cLobby Blocks".equals(item.getItemMeta().getDisplayName());
     }
 
     private boolean isLobbyItem(ItemStack item) {
@@ -448,22 +446,6 @@ public class LobbyListener implements Listener {
 
     private boolean nameEquals(ItemStack item, String name) {
         return item.hasItemMeta() && name.equals(item.getItemMeta().getDisplayName());
-    }
-
-    private void activateRedstoneSignal(Block block) {
-        // REDSTONE_BLOCK is a strong power source (power level 15)
-        // Update the block and surrounding blocks to trigger redstone components
-        block.getState().update(true, true);
-
-        // Update all six adjacent blocks to ensure redstone components react
-        BlockFace[] faces = {BlockFace.UP, BlockFace.DOWN, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST};
-        for (BlockFace face : faces) {
-            Block relative = block.getRelative(face);
-            relative.getState().update(true, false);
-        }
-
-        // Visual effect only - no sound
-        block.getWorld().playEffect(block.getLocation(), Effect.MOBSPAWNER_FLAMES, 0, 16);
     }
 
     private boolean hasSolidBlockBetween(Location from, Location to) {

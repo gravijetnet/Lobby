@@ -1,3 +1,10 @@
+# Lobby block settings
+# Diamond blocks placed by players transform over time:
+#   Diamond Block -> Emerald Block (after first-change-ticks) -> Air (after remove-ticks)
+lobby-blocks:
+  first-change-ticks: 100   # 5 seconds (20 ticks/sec * 5)
+  remove-ticks: 140         # 7 seconds total (20 ticks/sec * 7)
+
 # Spawn location
 spawn:
   world: spawn
