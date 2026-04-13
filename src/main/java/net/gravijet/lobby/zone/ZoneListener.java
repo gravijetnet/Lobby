@@ -12,9 +12,9 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.util.Vector;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -89,40 +89,26 @@ public final class ZoneListener implements Listener {
         }
 
         Zone deniedTo = zoneManager.getDeniedZoneAt(player, to);
-        if (deniedTo != null) {
-            event.setCancelled(true);
-            Zone deniedFrom = zoneManager.getDeniedZoneAt(player, from);
-            // If player is already inside a denied zone (i.e., moving within it)
-            if (deniedFrom != null && deniedFrom.equals(deniedTo)) {
-                // Player is inside the zone, check if near edge
-                Location nearestBoundary = ZoneManager.findNearestBoundaryPoint(player.getLocation(), deniedTo);
-                double distanceToEdge = nearestBoundary != null ? nearestBoundary.distance(player.getLocation()) : Double.MAX_VALUE;
-                // If near edge (within 2 blocks), knockback out; otherwise teleport to spawn
-                if (distanceToEdge <= 2.0) {
-                    Vector knockback = ZoneManager.calculateKnockbackVector(player, deniedTo);
-                    player.setVelocity(knockback);
-                    sendDenyMessage(player, deniedTo);
-                } else {
-                    Location spawn = plugin.getSpawnLocation();
-                    if (spawn != null && zoneManager.getDeniedZoneAt(player, spawn) == null) {
-                        player.teleport(spawn);
-                        player.sendMessage("§cYou are not allowed to be in this area! Teleported to spawn.");
-                    } else {
-                        // No spawn set or spawn is also in a denied zone, fallback to knockback
-                        Vector knockback = ZoneManager.calculateKnockbackVector(player, deniedTo);
-                        player.setVelocity(knockback);
-                        sendDenyMessage(player, deniedTo);
-                    }
-                }
+        if (deniedTo == null) return;
+
+        event.setCancelled(true);
+        sendDenyMessage(player, deniedTo);
+
+        Zone deniedFrom = zoneManager.getDeniedZoneAt(player, from);
+        if (deniedFrom != null && deniedFrom.equals(deniedTo)) {
+            // Player is already inside the denied zone — teleport to safe position outside
+            Location safePos = calcSafeOutsidePoint(from, deniedFrom);
+            if (safePos != null) {
+                player.teleport(safePos);
             } else {
-                // Player is trying to enter the zone from outside
-                Vector knockback = ZoneManager.calculateKnockbackVector(player, deniedTo);
-                player.setVelocity(knockback);
-                sendDenyMessage(player, deniedTo);
+                Location spawn = plugin.getSpawnLocation();
+                if (spawn != null && zoneManager.getDeniedZoneAt(player, spawn) == null) {
+                    player.teleport(spawn);
+                }
             }
         }
+        // If entering from outside: cancelling the event keeps player at `from` (outside the zone)
     }
-
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
@@ -130,21 +116,16 @@ public final class ZoneListener implements Listener {
         Location loc = player.getLocation();
         Zone deniedZone = zoneManager.getDeniedZoneAt(player, loc);
         if (deniedZone != null) {
-            // Player logged inside a denied zone, teleport to spawn if safe
             Location spawn = plugin.getSpawnLocation();
             if (spawn != null && zoneManager.getDeniedZoneAt(player, spawn) == null) {
                 player.teleport(spawn);
                 player.sendMessage("§cYou were in a restricted area! Teleported to spawn.");
             } else {
-                // No safe spawn, try to knockback out of zone
-                Location nearestBoundary = ZoneManager.findNearestBoundaryPoint(loc, deniedZone);
-                double distanceToEdge = nearestBoundary != null ? nearestBoundary.distance(loc) : Double.MAX_VALUE;
-                if (distanceToEdge <= 2.0) {
-                    Vector knockback = ZoneManager.calculateKnockbackVector(player, deniedZone);
-                    player.setVelocity(knockback);
+                Location safePos = calcSafeOutsidePoint(loc, deniedZone);
+                if (safePos != null) {
+                    player.teleport(safePos);
                     sendDenyMessage(player, deniedZone);
                 } else {
-                    // Cannot knockback, just warn
                     player.sendMessage("§cYou are in a restricted area! Leave immediately.");
                 }
             }
@@ -167,5 +148,40 @@ public final class ZoneListener implements Listener {
             message = message.replace("{permission}", zone.getRequiredPermission());
         }
         player.sendMessage(message);
+    }
+
+    /**
+     * Calculates a safe position just outside the zone boundary nearest to playerLoc.
+     * Uses the zone centroid to determine the outward direction from the boundary edge.
+     */
+    private Location calcSafeOutsidePoint(Location playerLoc, Zone zone) {
+        Location boundary = ZoneManager.findNearestBoundaryPoint(playerLoc, zone);
+        if (boundary == null) return null;
+
+        // Calculate zone centroid
+        List<int[]> corners = zone.getCorners();
+        double cx = 0, cz = 0;
+        for (int[] corner : corners) {
+            cx += corner[0] + 0.5;
+            cz += corner[1] + 0.5;
+        }
+        cx /= corners.size();
+        cz /= corners.size();
+
+        // Direction from centroid outward through boundary point
+        double dx = boundary.getX() - cx;
+        double dz = boundary.getZ() - cz;
+        double len = Math.sqrt(dx * dx + dz * dz);
+        if (len < 0.01) return null;
+
+        // Place player 1.5 blocks beyond the boundary in the outward direction
+        return new Location(
+            playerLoc.getWorld(),
+            boundary.getX() + (dx / len) * 1.5,
+            playerLoc.getY(),
+            boundary.getZ() + (dz / len) * 1.5,
+            playerLoc.getYaw(),
+            playerLoc.getPitch()
+        );
     }
 }
