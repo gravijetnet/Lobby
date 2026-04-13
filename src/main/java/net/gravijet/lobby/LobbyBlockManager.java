@@ -105,7 +105,8 @@ public class LobbyBlockManager {
                 World world = Bukkit.getWorld(worldName);
                 if (world != null) {
                     Block block = world.getBlockAt(x, y, z);
-                    if (block.getType() == Material.DIAMOND_BLOCK || block.getType() == Material.SANDSTONE) {
+                    if (block.getType() == Material.DIAMOND_BLOCK || block.getType() == Material.SANDSTONE
+                            || block.getType() == Material.REDSTONE_BLOCK || block.getType() == Material.EMERALD_BLOCK) {
                         block.setType(Material.AIR);
                         removed++;
                     }
