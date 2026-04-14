@@ -22,13 +22,15 @@ public final class ZoneListener implements Listener {
 
     private final Main plugin;
     private final ZoneManager zoneManager;
-    private final Map<UUID, Long> denyMessageCooldown = new HashMap<>();
-    private static final long DENY_MESSAGE_COOLDOWN_MS = 1500L;
+    private final Map<UUID, Long> messageCooldowns = new HashMap<>();
+    private static final long MESSAGE_COOLDOWN_MS = 1500L;
 
     public ZoneListener(Main plugin, ZoneManager zoneManager) {
         this.plugin = plugin;
         this.zoneManager = zoneManager;
     }
+
+    // ── Zone Wand ─────────────────────────────────────────────────────────────
 
     @EventHandler(priority = EventPriority.NORMAL)
     public void onWandInteract(PlayerInteractEvent event) {
@@ -42,6 +44,7 @@ public final class ZoneListener implements Listener {
 
         Action action = event.getAction();
 
+        // Left-click: remove last corner
         if (action == Action.LEFT_CLICK_BLOCK || action == Action.LEFT_CLICK_AIR) {
             ZoneSelectionSession session = zoneManager.getOrCreateSession(player.getUniqueId());
             if (session.removeLastCorner()) {
@@ -52,54 +55,66 @@ public final class ZoneListener implements Listener {
             return;
         }
 
-        if (action == Action.RIGHT_CLICK_BLOCK) {
-            if (player.isSneaking()) {
-                ZoneSelectionSession session = zoneManager.getOrCreateSession(player.getUniqueId());
-                for (String line : session.buildSummary()) {
-                    player.sendMessage(line);
-                }
-                return;
+        // Shift + right-click: show summary
+        if ((action == Action.RIGHT_CLICK_BLOCK || action == Action.RIGHT_CLICK_AIR) && player.isSneaking()) {
+            ZoneSelectionSession session = zoneManager.getOrCreateSession(player.getUniqueId());
+            for (String line : session.buildSummary()) {
+                player.sendMessage(line);
             }
+            return;
+        }
 
+        // Right-click block: add corner
+        if (action == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) {
             Location cornerLoc = event.getClickedBlock().getLocation();
             ZoneSelectionSession session = zoneManager.getOrCreateSession(player.getUniqueId());
 
-            if (!session.isEmpty() && session.getWorldName() != null) {
-                if (!session.getWorldName().equals(cornerLoc.getWorld().getName())) {
-                    player.sendMessage("§cAll corners must be in the same world!");
-                    return;
-                }
+            if (!session.isEmpty() && session.getWorldName() != null
+                    && !session.getWorldName().equals(cornerLoc.getWorld().getName())) {
+                player.sendMessage("§cAll corners must be in the same world!");
+                return;
             }
 
             int index = session.addCorner(cornerLoc);
-            player.sendMessage(String.format("§aCorner §f#%d §aadded at §f(%d, %d)§a. §7[%d total%s]", index, cornerLoc.getBlockX(), cornerLoc.getBlockZ(), session.size(), session.isComplete() ? " — §apolygon ready§7" : " — need " + (3 - session.size()) + " more"));
+            player.sendMessage(String.format(
+                "§aCorner §f#%d §aadded at §f(%d, %d)§a. §7[%d total%s]",
+                index,
+                cornerLoc.getBlockX(), cornerLoc.getBlockZ(),
+                session.size(),
+                session.isComplete() ? " — §apolygon ready§7" : " — need " + (3 - session.size()) + " more"
+            ));
         }
     }
+
+    // ── Zone Entry / Movement ─────────────────────────────────────────────────
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerMove(PlayerMoveEvent event) {
         if (event.isCancelled() || event.getTo() == null) return;
 
         Player player = event.getPlayer();
-        Location to = event.getTo();
         Location from = event.getFrom();
+        Location to = event.getTo();
 
-        if (from.getBlockX() == to.getBlockX() && from.getBlockY() == to.getBlockY() && from.getBlockZ() == to.getBlockZ()) {
+        // Skip pure head rotation (no block change)
+        if (from.getBlockX() == to.getBlockX()
+                && from.getBlockY() == to.getBlockY()
+                && from.getBlockZ() == to.getBlockZ()) {
             return;
         }
 
-        Zone deniedTo = zoneManager.getDeniedZoneAt(player, to);
-        if (deniedTo == null) return;
+        Zone denied = zoneManager.getDeniedZoneAt(player, to);
+        if (denied == null) return;
 
         event.setCancelled(true);
-        sendDenyMessage(player, deniedTo);
+        sendDenyMessage(player, denied);
 
+        // If already inside the denied zone, push player to safety
         Zone deniedFrom = zoneManager.getDeniedZoneAt(player, from);
-        if (deniedFrom != null && deniedFrom.equals(deniedTo)) {
-            // Player is already inside the denied zone — teleport to safe position outside
-            Location safePos = calcSafeOutsidePoint(from, deniedFrom);
-            if (safePos != null) {
-                player.teleport(safePos);
+        if (deniedFrom != null && deniedFrom.getName().equals(denied.getName())) {
+            Location safe = calcSafePosition(from, denied);
+            if (safe != null) {
+                player.teleport(safe);
             } else {
                 Location spawn = plugin.getSpawnLocation();
                 if (spawn != null && zoneManager.getDeniedZoneAt(player, spawn) == null) {
@@ -107,74 +122,72 @@ public final class ZoneListener implements Listener {
                 }
             }
         }
-        // If entering from outside: cancelling the event keeps player at `from` (outside the zone)
+        // If entering from outside: cancelling event keeps player at `from`
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        Location loc = player.getLocation();
-        Zone deniedZone = zoneManager.getDeniedZoneAt(player, loc);
-        if (deniedZone != null) {
-            Location spawn = plugin.getSpawnLocation();
-            if (spawn != null && zoneManager.getDeniedZoneAt(player, spawn) == null) {
-                player.teleport(spawn);
-                player.sendMessage("§cYou were in a restricted area! Teleported to spawn.");
+        Zone denied = zoneManager.getDeniedZoneAt(player, player.getLocation());
+        if (denied == null) return;
+
+        Location spawn = plugin.getSpawnLocation();
+        if (spawn != null && zoneManager.getDeniedZoneAt(player, spawn) == null) {
+            player.teleport(spawn);
+            player.sendMessage("§cYou were in a restricted area! Teleported to spawn.");
+        } else {
+            Location safe = calcSafePosition(player.getLocation(), denied);
+            if (safe != null) {
+                player.teleport(safe);
+                sendDenyMessage(player, denied);
             } else {
-                Location safePos = calcSafeOutsidePoint(loc, deniedZone);
-                if (safePos != null) {
-                    player.teleport(safePos);
-                    sendDenyMessage(player, deniedZone);
-                } else {
-                    player.sendMessage("§cYou are in a restricted area! Leave immediately.");
-                }
+                player.sendMessage("§cYou are in a restricted area! Leave immediately.");
             }
         }
     }
 
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        zoneManager.clearSession(event.getPlayer().getUniqueId());
-        denyMessageCooldown.remove(event.getPlayer().getUniqueId());
+        UUID uuid = event.getPlayer().getUniqueId();
+        zoneManager.clearSession(uuid);
+        messageCooldowns.remove(uuid);
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private void sendDenyMessage(Player player, Zone zone) {
         long now = System.currentTimeMillis();
-        Long last = denyMessageCooldown.get(player.getUniqueId());
-        if (last != null && now - last < DENY_MESSAGE_COOLDOWN_MS) return;
-        denyMessageCooldown.put(player.getUniqueId(), now);
-        String message = zone.getDenyMessage();
-        if (message.contains("{permission}")) {
-            message = message.replace("{permission}", zone.getRequiredPermission());
+        Long last = messageCooldowns.get(player.getUniqueId());
+        if (last != null && now - last < MESSAGE_COOLDOWN_MS) return;
+        messageCooldowns.put(player.getUniqueId(), now);
+
+        String msg = zone.getDenyMessage();
+        if (msg.contains("{permission}")) {
+            msg = msg.replace("{permission}", zone.getRequiredPermission());
         }
-        player.sendMessage(message);
+        player.sendMessage(msg);
     }
 
-    /**
-     * Calculates a safe position just outside the zone boundary nearest to playerLoc.
-     * Uses the zone centroid to determine the outward direction from the boundary edge.
-     */
-    private Location calcSafeOutsidePoint(Location playerLoc, Zone zone) {
+    private Location calcSafePosition(Location playerLoc, Zone zone) {
         Location boundary = ZoneManager.findNearestBoundaryPoint(playerLoc, zone);
         if (boundary == null) return null;
 
-        // Calculate zone centroid
         List<int[]> corners = zone.getCorners();
         double cx = 0, cz = 0;
-        for (int[] corner : corners) {
-            cx += corner[0] + 0.5;
-            cz += corner[1] + 0.5;
+        for (int[] c : corners) {
+            cx += c[0] + 0.5;
+            cz += c[1] + 0.5;
         }
         cx /= corners.size();
         cz /= corners.size();
 
-        // Direction from centroid outward through boundary point
         double dx = boundary.getX() - cx;
         double dz = boundary.getZ() - cz;
         double len = Math.sqrt(dx * dx + dz * dz);
         if (len < 0.01) return null;
 
-        // Place player 1.5 blocks beyond the boundary in the outward direction
         return new Location(
             playerLoc.getWorld(),
             boundary.getX() + (dx / len) * 1.5,
