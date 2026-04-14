@@ -45,7 +45,9 @@ public class LobbyListener implements Listener {
     private final Map<UUID, EnderPearl> enderButtPearls = new HashMap<>();
     private final Map<UUID, Location> lastPearlLoc = new HashMap<>();
     private final Map<Location, int[]> lobbyBlockTasks = new HashMap<>();
+    private final Map<UUID, Long> blockDenyCooldowns = new HashMap<>();
     private static final double MAX_PEARL_SPEED = 3.0;
+    private static final long BLOCK_DENY_COOLDOWN_MS = 2000L;
 
     public LobbyListener(Main plugin, ZoneManager zoneManager, LobbyBlockManager lobbyBlockManager) {
         this.plugin = plugin;
@@ -163,6 +165,7 @@ public class LobbyListener implements Listener {
         plugin.setFlightPreference(player, !plugin.isFlightDisabledByUser(player));
         plugin.saveConfig();
         player.setScoreboard(Bukkit.getScoreboardManager().getNewScoreboard());
+        blockDenyCooldowns.remove(player.getUniqueId());
 
         // Remove player from build mode when leaving
         if (plugin.isInBuildMode(player)) {
@@ -184,31 +187,58 @@ public class LobbyListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onBlockPlace(BlockPlaceEvent event) {
         Player player = event.getPlayer();
+
+        // Build mode: unrestricted placement
         if (plugin.isInBuildMode(player)) {
             event.setCancelled(false);
             return;
         }
+
         ItemStack item = event.getItemInHand();
         Block placed = event.getBlockPlaced();
-        if (isLobbyBlock(item)) {
-            event.setCancelled(false);
-            scheduleLobbyBlock(placed.getLocation(), item.getType());
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                ItemStack slot4 = player.getInventory().getItem(4);
-                if (slot4 != null && isLobbyBlock(slot4)) {
-                    slot4.setAmount(64);
-                } else {
-                    ItemStack fresh = new ItemStack(Material.DIAMOND_BLOCK, 64);
-                    ItemMeta meta = fresh.getItemMeta();
-                    meta.setDisplayName("§cLobby Blocks");
-                    fresh.setItemMeta(meta);
-                    player.getInventory().setItem(4, fresh);
-                }
-                player.updateInventory();
-            });
-        } else {
+
+        // Only lobby blocks are allowed outside of build mode
+        if (!isLobbyBlock(item)) {
             event.setCancelled(true);
+            return;
         }
+
+        // Check zone block-placement restriction
+        if (!player.hasPermission("lobby.zone.bypass")) {
+            Zone zone = zoneManager.getZoneAt(placed.getLocation());
+            if (zone != null && !zone.isAllowBlockPlacement()) {
+                event.setCancelled(true);
+                sendBlockDenyMessage(player);
+                return;
+            }
+        }
+
+        // Allow lobby block and start animation
+        event.setCancelled(false);
+        scheduleLobbyBlock(placed.getLocation(), item.getType());
+
+        // Keep slot 4 filled with 64 sandstone lobby blocks
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            ItemStack slot4 = player.getInventory().getItem(4);
+            if (slot4 != null && isLobbyBlock(slot4)) {
+                slot4.setAmount(64);
+            } else {
+                ItemStack fresh = new ItemStack(Material.SANDSTONE, 64);
+                ItemMeta meta = fresh.getItemMeta();
+                meta.setDisplayName("§cLobby Blocks");
+                fresh.setItemMeta(meta);
+                player.getInventory().setItem(4, fresh);
+            }
+            player.updateInventory();
+        });
+    }
+
+    private void sendBlockDenyMessage(Player player) {
+        long now = System.currentTimeMillis();
+        Long last = blockDenyCooldowns.get(player.getUniqueId());
+        if (last != null && now - last < BLOCK_DENY_COOLDOWN_MS) return;
+        blockDenyCooldowns.put(player.getUniqueId(), now);
+        player.sendMessage("§cYou cannot place blocks in this zone!");
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -392,7 +422,8 @@ public class LobbyListener implements Listener {
         }
     }
 
-    private void scheduleLobbyBlock(Location loc, Material originalType) {
+    private void scheduleLobbyBlock(Location loc, Material itemType) {
+        // Cancel any running animation at this location
         int[] existing = lobbyBlockTasks.remove(loc);
         if (existing != null) {
             for (int id : existing) Bukkit.getScheduler().cancelTask(id);
@@ -400,12 +431,21 @@ public class LobbyListener implements Listener {
 
         lobbyBlockManager.addLobbyBlock(loc);
 
-        // Both types: sandstone for 5s (100t), then color block, then disappear after 2s (40t)
-        // Sandstone placement: sandstone → redstone block → air
-        // Diamond placement: immediately sandstone → emerald block → air
-        final Material colorBlock = (originalType == Material.SANDSTONE) ? Material.REDSTONE_BLOCK : Material.EMERALD_BLOCK;
+        // Play placement sound
+        loc.getWorld().playSound(loc, Sound.DIG_STONE, 0.8f, 1.2f);
+        // Orange sparkle to mark the block
+        loc.getWorld().spigot().playEffect(
+            loc.clone().add(0.5, 0.5, 0.5),
+            org.bukkit.Effect.COLOURED_DUST, 0, 1,
+            1.0f, 0.55f, 0.0f, 1, 20, 12
+        );
 
-        if (originalType == Material.DIAMOND_BLOCK) {
+        // Diamond blocks display as sandstone immediately (same animation, different ending)
+        final Material colorBlock = (itemType == Material.DIAMOND_BLOCK)
+            ? Material.EMERALD_BLOCK
+            : Material.REDSTONE_BLOCK;
+
+        if (itemType == Material.DIAMOND_BLOCK) {
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (loc.getBlock().getType() == Material.DIAMOND_BLOCK) {
                     loc.getBlock().setType(Material.SANDSTONE);
@@ -413,16 +453,27 @@ public class LobbyListener implements Listener {
             });
         }
 
+        // Phase 1 – after 5 s (100 t): sandstone → color block
         int t1 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (loc.getBlock().getType() == Material.SANDSTONE) {
                 loc.getBlock().setType(colorBlock);
+                //loc.getWorld().playSound(loc, Sound.NOTE_PLING, 0.6f, 1.4f);
             }
         }, 100L).getTaskId();
 
+        // Phase 2 – after 2 more s (40 t): color block → air
         int t2 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             lobbyBlockTasks.remove(loc);
             lobbyBlockManager.removeLobbyBlock(loc);
-            if (loc.getBlock().getType() == colorBlock) loc.getBlock().setType(Material.AIR);
+            if (loc.getBlock().getType() == colorBlock) {
+                loc.getBlock().setType(Material.AIR);
+                //loc.getWorld().playSound(loc, Sound.POP, 0.5f, 1.5f);
+                loc.getWorld().spigot().playEffect(
+                    loc.clone().add(0.5, 0.5, 0.5),
+                    org.bukkit.Effect.COLOURED_DUST, 0, 1,
+                    0.2f, 1.0f, 0.2f, 1, 15, 12
+                );
+            }
         }, 140L).getTaskId();
 
         lobbyBlockTasks.put(loc, new int[]{t1, t2});
