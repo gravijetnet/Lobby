@@ -1,6 +1,7 @@
 package net.gravijet.lobby.zone;
 
 import net.gravijet.lobby.Main;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -12,6 +13,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.util.Vector;
 
 import java.util.HashMap;
 import java.util.List;
@@ -109,20 +111,69 @@ public final class ZoneListener implements Listener {
         event.setCancelled(true);
         sendDenyMessage(player, denied);
 
-        // If already inside the denied zone, push player to safety
         Zone deniedFrom = zoneManager.getDeniedZoneAt(player, from);
-        if (deniedFrom != null && deniedFrom.getName().equals(denied.getName())) {
-            Location safe = calcSafePosition(from, denied);
-            if (safe != null) {
-                player.teleport(safe);
-            } else {
-                Location spawn = plugin.getSpawnLocation();
-                if (spawn != null && zoneManager.getDeniedZoneAt(player, spawn) == null) {
-                    player.teleport(spawn);
-                }
+        boolean alreadyInside = deniedFrom != null && deniedFrom.getName().equals(denied.getName());
+
+        // Calculate depth (distance from player to nearest zone boundary)
+        double depth = 0;
+        if (alreadyInside) {
+            Location boundary = ZoneManager.findNearestBoundaryPoint(from, denied);
+            if (boundary != null) {
+                double dx = from.getX() - boundary.getX();
+                double dz = from.getZ() - boundary.getZ();
+                depth = Math.sqrt(dx * dx + dz * dz);
             }
         }
-        // If entering from outside: cancelling event keeps player at `from`
+
+        // Knockback strength: 0.4 base + 0.6 per block of depth, capped at 3.5
+        final double strength = Math.max(0.4, Math.min(0.4 + depth * 0.6, 3.5));
+        final Zone finalDenied = denied;
+
+        if (alreadyInside) {
+            // Teleport to safe position, then knock away from zone
+            Location safe = calcSafePosition(from, denied);
+            if (safe == null) safe = plugin.getSpawnLocation();
+            final Location safeLoc = safe;
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (!player.isOnline()) return;
+                if (safeLoc != null && zoneManager.getDeniedZoneAt(player, safeLoc) == null) {
+                    player.teleport(safeLoc);
+                }
+                applyKnockback(player, finalDenied, strength);
+            });
+        } else {
+            // Entering from outside: event cancellation holds player at `from`, apply knockback away
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (!player.isOnline()) return;
+                applyKnockback(player, finalDenied, strength);
+            });
+        }
+    }
+
+    private void applyKnockback(Player player, Zone zone, double strength) {
+        Location loc = player.getLocation();
+        Location boundary = ZoneManager.findNearestBoundaryPoint(loc, zone);
+        if (boundary == null) {
+            player.setVelocity(new Vector(0, 0.3, 0));
+            return;
+        }
+        boolean inside = zone.contains(loc);
+        double dx, dz;
+        if (inside) {
+            // Push toward nearest boundary to exit
+            dx = boundary.getX() - loc.getX();
+            dz = boundary.getZ() - loc.getZ();
+        } else {
+            // Push away from boundary
+            dx = loc.getX() - boundary.getX();
+            dz = loc.getZ() - boundary.getZ();
+        }
+        double len = Math.sqrt(dx * dx + dz * dz);
+        if (len > 0.01) {
+            player.setVelocity(new Vector(dx / len * strength, 0.3, dz / len * strength));
+        } else {
+            player.setVelocity(new Vector(0, 0.5, 0));
+        }
     }
 
     @EventHandler
