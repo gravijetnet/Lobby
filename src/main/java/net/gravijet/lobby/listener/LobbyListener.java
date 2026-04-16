@@ -93,6 +93,27 @@ public class LobbyListener implements Listener {
                 previousLoc = null;
             }
 
+            // Zone restriction: stop pearl if it enters a zone the rider can't access
+            Player riderCheck = Bukkit.getPlayer(uuid);
+            if (riderCheck != null && riderCheck.isOnline() && pearl.getPassenger() != null) {
+                Zone deniedZone = zoneManager.getDeniedZoneAt(riderCheck, currentLoc);
+                if (deniedZone != null) {
+                    Location safeReturn = (previousLoc != null) ? previousLoc.clone() : null;
+                    riderCheck.eject();
+                    pearl.eject();
+                    pearl.remove();
+                    it.remove();
+                    lastPearlLoc.remove(uuid);
+                    if (safeReturn != null && zoneManager.getDeniedZoneAt(riderCheck, safeReturn) == null) {
+                        safeReturn.setYaw(riderCheck.getLocation().getYaw());
+                        safeReturn.setPitch(riderCheck.getLocation().getPitch());
+                        riderCheck.teleport(safeReturn);
+                    }
+                    riderCheck.setVelocity(new Vector(0, 0, 0));
+                    continue;
+                }
+            }
+
             boolean collisionDetected = false;
 
             // Check pearl collision
@@ -217,10 +238,13 @@ public class LobbyListener implements Listener {
         event.setCancelled(false);
         scheduleLobbyBlock(placed.getLocation(), item.getType());
 
-        // Keep slot 4 filled with 64 sandstone lobby blocks
+        // Keep slot 4 filled with 64 sandstone lobby blocks (only for named lobby block items)
         Bukkit.getScheduler().runTask(plugin, () -> {
             ItemStack slot4 = player.getInventory().getItem(4);
-            if (slot4 != null && isLobbyBlock(slot4)) {
+            boolean isNamedLobbyBlock = slot4 != null && slot4.hasItemMeta()
+                && "§cLobby Blocks".equals(slot4.getItemMeta().getDisplayName())
+                && (slot4.getType() == Material.SANDSTONE || slot4.getType() == Material.DIAMOND_BLOCK);
+            if (isNamedLobbyBlock) {
                 slot4.setAmount(64);
             } else {
                 ItemStack fresh = new ItemStack(Material.SANDSTONE, 64);
@@ -432,7 +456,7 @@ public class LobbyListener implements Listener {
         lobbyBlockManager.addLobbyBlock(loc);
 
         // Play placement sound
-        loc.getWorld().playSound(loc, Sound.DIG_STONE, 0.8f, 1.2f);
+      //  loc.getWorld().playSound(loc, Sound.DIG_STONE, 0.8f, 1.2f);
         // Orange sparkle to mark the block
         loc.getWorld().spigot().playEffect(
             loc.clone().add(0.5, 0.5, 0.5),
@@ -490,7 +514,10 @@ public class LobbyListener implements Listener {
     }
 
     private boolean isLobbyBlock(ItemStack item) {
-        return item != null && (item.getType() == Material.SANDSTONE || item.getType() == Material.DIAMOND_BLOCK) && item.hasItemMeta() && "§cLobby Blocks".equals(item.getItemMeta().getDisplayName());
+        if (item == null) return false;
+        // Any diamond block is always allowed as a lobby block
+        if (item.getType() == Material.DIAMOND_BLOCK) return true;
+        return item.getType() == Material.SANDSTONE && item.hasItemMeta() && "§cLobby Blocks".equals(item.getItemMeta().getDisplayName());
     }
 
     private boolean isLobbyItem(ItemStack item) {
