@@ -26,10 +26,88 @@ public final class ZoneListener implements Listener {
     private final ZoneManager zoneManager;
     private final Map<UUID, Long> messageCooldowns = new HashMap<>();
     private static final long MESSAGE_COOLDOWN_MS = 1500L;
+    // Tracks how many ticks a player has been stuck in a denied zone
+    private final Map<UUID, Integer> stuckTicks = new HashMap<>();
 
     public ZoneListener(Main plugin, ZoneManager zoneManager) {
         this.plugin = plugin;
         this.zoneManager = zoneManager;
+        startStuckCheck();
+    }
+
+    private void startStuckCheck() {
+        // Runs every 10 ticks (~0.5s). After 3 fires (1.5s) stuck → force teleport.
+        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                Zone denied = zoneManager.getDeniedZoneAt(player, player.getLocation());
+                if (denied == null) {
+                    stuckTicks.remove(player.getUniqueId());
+                    continue;
+                }
+
+                int fires = stuckTicks.merge(player.getUniqueId(), 1, Integer::sum);
+
+                if (fires >= 3) {
+                    stuckTicks.put(player.getUniqueId(), 0);
+                    ejectToSpawn(player, denied);
+                    continue;
+                }
+
+                Location boundary = ZoneManager.findNearestBoundaryPoint(player.getLocation(), denied);
+                double depth = 0;
+                if (boundary != null) {
+                    double dx = player.getLocation().getX() - boundary.getX();
+                    double dz = player.getLocation().getZ() - boundary.getZ();
+                    depth = Math.sqrt(dx * dx + dz * dz);
+                }
+                double strength = Math.max(0.6, Math.min(0.6 + depth * 0.8 + fires * 0.3, 5.0));
+                applyKnockback(player, denied, strength);
+            }
+        }, 10L, 10L);
+    }
+
+    private void ejectToSpawn(Player player, Zone denied) {
+        Location spawn = plugin.getSpawnLocation();
+        if (spawn != null && zoneManager.getDeniedZoneAt(player, spawn) == null) {
+            player.teleport(spawn);
+            return;
+        }
+        // Spawn not available — scan outward from boundary
+        Location safe = findSafeOutsideLocation(player.getLocation(), denied);
+        if (safe != null) {
+            player.teleport(safe);
+        }
+    }
+
+    /** Walks outward from the nearest boundary in steps until clear of all denied zones. */
+    private Location findSafeOutsideLocation(Location from, Zone zone) {
+        Location boundary = ZoneManager.findNearestBoundaryPoint(from, zone);
+        if (boundary == null) return null;
+
+        List<int[]> corners = zone.getCorners();
+        double cx = 0, cz = 0;
+        for (int[] c : corners) { cx += c[0] + 0.5; cz += c[1] + 0.5; }
+        cx /= corners.size(); cz /= corners.size();
+
+        double dx = boundary.getX() - cx;
+        double dz = boundary.getZ() - cz;
+        double len = Math.sqrt(dx * dx + dz * dz);
+        if (len < 0.01) return null;
+        double ux = dx / len, uz = dz / len;
+
+        for (double dist = 1.5; dist <= 10.0; dist += 0.5) {
+            Location candidate = new Location(
+                from.getWorld(),
+                boundary.getX() + ux * dist,
+                from.getY(),
+                boundary.getZ() + uz * dist,
+                from.getYaw(), from.getPitch()
+            );
+            if (zoneManager.getZoneAt(candidate) == null) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     // ── Zone Wand ─────────────────────────────────────────────────────────────
@@ -130,16 +208,10 @@ public final class ZoneListener implements Listener {
         final Zone finalDenied = denied;
 
         if (alreadyInside) {
-            // Teleport to safe position, then knock away from zone
-            Location safe = calcSafePosition(from, denied);
-            if (safe == null) safe = plugin.getSpawnLocation();
-            final Location safeLoc = safe;
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (!player.isOnline()) return;
-                if (safeLoc != null && zoneManager.getDeniedZoneAt(player, safeLoc) == null) {
-                    player.teleport(safeLoc);
-                }
                 applyKnockback(player, finalDenied, strength);
+                // ejectToSpawn handles being stuck; periodic task will catch prolonged cases
             });
         } else {
             // Entering from outside: event cancellation holds player at `from`, apply knockback away
@@ -204,6 +276,7 @@ public final class ZoneListener implements Listener {
         UUID uuid = event.getPlayer().getUniqueId();
         zoneManager.clearSession(uuid);
         messageCooldowns.remove(uuid);
+        stuckTicks.remove(uuid);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -221,31 +294,4 @@ public final class ZoneListener implements Listener {
         player.sendMessage(msg);
     }
 
-    private Location calcSafePosition(Location playerLoc, Zone zone) {
-        Location boundary = ZoneManager.findNearestBoundaryPoint(playerLoc, zone);
-        if (boundary == null) return null;
-
-        List<int[]> corners = zone.getCorners();
-        double cx = 0, cz = 0;
-        for (int[] c : corners) {
-            cx += c[0] + 0.5;
-            cz += c[1] + 0.5;
-        }
-        cx /= corners.size();
-        cz /= corners.size();
-
-        double dx = boundary.getX() - cx;
-        double dz = boundary.getZ() - cz;
-        double len = Math.sqrt(dx * dx + dz * dz);
-        if (len < 0.01) return null;
-
-        return new Location(
-            playerLoc.getWorld(),
-            boundary.getX() + (dx / len) * 1.5,
-            playerLoc.getY(),
-            boundary.getZ() + (dz / len) * 1.5,
-            playerLoc.getYaw(),
-            playerLoc.getPitch()
-        );
-    }
 }
