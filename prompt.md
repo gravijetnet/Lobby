@@ -1,1 +1,2 @@
-claude --resume 6ca3b035-bea3-41b7-9798-32ef8abf2af3
+Bitte mach, dass wenn man einen Diamantblock platziert, dass der dann nach 5 sekunden zu einem emeraldblock wird und dann verschwindet. aktuell wird er nämlich sofort zu sandstone und dann zu redstone, was so aber nicht sein soll bitte.
+es soll bitte keine bypass permissions geben für admins für die zonenblöckeplatzierung. (also admins können auch nicht überall blöcke platzieren, gleich wie die normalen spieler bitte)

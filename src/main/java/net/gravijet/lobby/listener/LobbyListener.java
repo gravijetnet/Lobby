@@ -225,13 +225,11 @@ public class LobbyListener implements Listener {
         }
 
         // Check zone block-placement restriction
-        if (!player.hasPermission("lobby.zone.bypass")) {
-            Zone zone = zoneManager.getZoneAt(placed.getLocation());
-            if (zone != null && !zone.isAllowBlockPlacement()) {
-                event.setCancelled(true);
-                sendBlockDenyMessage(player);
-                return;
-            }
+        Zone zone = zoneManager.getZoneAt(placed.getLocation());
+        if (zone != null && !zone.isAllowBlockPlacement()) {
+            event.setCancelled(true);
+            sendBlockDenyMessage(player);
+            return;
         }
 
         // Allow lobby block and start animation
@@ -464,22 +462,13 @@ public class LobbyListener implements Listener {
             1.0f, 0.55f, 0.0f, 1, 20, 12
         );
 
-        // Diamond blocks display as sandstone immediately (same animation, different ending)
         final Material colorBlock = (itemType == Material.DIAMOND_BLOCK)
             ? Material.EMERALD_BLOCK
             : Material.REDSTONE_BLOCK;
 
-        if (itemType == Material.DIAMOND_BLOCK) {
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                if (loc.getBlock().getType() == Material.DIAMOND_BLOCK) {
-                    loc.getBlock().setType(Material.SANDSTONE);
-                }
-            });
-        }
-
-        // Phase 1 – after 5 s (100 t): sandstone → color block
+        // Phase 1 – after 5 s (100 t): placed block → color block
         int t1 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (loc.getBlock().getType() == Material.SANDSTONE) {
+            if (loc.getBlock().getType() == itemType) {
                 loc.getBlock().setType(colorBlock);
                 //loc.getWorld().playSound(loc, Sound.NOTE_PLING, 0.6f, 1.4f);
             }
