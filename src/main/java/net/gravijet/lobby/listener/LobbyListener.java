@@ -455,12 +455,6 @@ public class LobbyListener implements Listener {
 
         // Play placement sound
       //  loc.getWorld().playSound(loc, Sound.DIG_STONE, 0.8f, 1.2f);
-        // Orange sparkle to mark the block
-        loc.getWorld().spigot().playEffect(
-            loc.clone().add(0.5, 0.5, 0.5),
-            org.bukkit.Effect.COLOURED_DUST, 0, 1,
-            1.0f, 0.55f, 0.0f, 1, 20, 12
-        );
 
         final Material colorBlock = (itemType == Material.DIAMOND_BLOCK)
             ? Material.EMERALD_BLOCK
@@ -481,11 +475,6 @@ public class LobbyListener implements Listener {
             if (loc.getBlock().getType() == colorBlock) {
                 loc.getBlock().setType(Material.AIR);
                 //loc.getWorld().playSound(loc, Sound.POP, 0.5f, 1.5f);
-                loc.getWorld().spigot().playEffect(
-                    loc.clone().add(0.5, 0.5, 0.5),
-                    org.bukkit.Effect.COLOURED_DUST, 0, 1,
-                    0.2f, 1.0f, 0.2f, 1, 15, 12
-                );
             }
         }, 140L).getTaskId();
 
