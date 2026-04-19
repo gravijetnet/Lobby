@@ -281,6 +281,21 @@ public final class ZoneListener implements Listener {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    private Location calcSafePosition(Location loc, Zone denied) {
+        double[] offsets = {2, 4, 6, 8};
+        double[] angles = {0, 45, 90, 135, 180, 225, 270, 315};
+        for (double r : offsets) {
+            for (double a : angles) {
+                double rad = Math.toRadians(a);
+                Location candidate = loc.clone().add(Math.cos(rad) * r, 0, Math.sin(rad) * r);
+                if (!denied.contains(candidate)) {
+                    return candidate;
+                }
+            }
+        }
+        return null;
+    }
+
     private void sendDenyMessage(Player player, Zone zone) {
         long now = System.currentTimeMillis();
         Long last = messageCooldowns.get(player.getUniqueId());
