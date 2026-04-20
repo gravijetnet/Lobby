@@ -1,3 +1,0 @@
-Bitte entferne die extra Sounds, wenn man blöcke in der lobby platziert. es soll nur der ganz normale sound sein und nichts extra bitte.
-Bitte mach auch noch bei den Zonen, dass wenn man keine Permission hat, dass man nicht stuck bleibt und sich nicht bewegen kann am Rand, sondern bitte weggespeckt wird davon. Also wenn man probiert, hineinzugehen, wird man einfach weggespeckt, anstatt stuck zu sein.
-Alles soll auf Englisch bitte sein.
