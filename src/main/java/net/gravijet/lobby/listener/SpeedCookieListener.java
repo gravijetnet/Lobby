@@ -61,7 +61,7 @@ public class SpeedCookieListener implements Listener {
         if (!isSpeedCookie(event.getItem())) return;
         player.setFoodLevel(20);
         player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 20 * 60 * 10, 1, false, false), true);
-        player.sendMessage("§aYou received §bSpeed II §afor §b10 minutes§a!");
+        plugin.getMessages().send(player, "speedcookie.received-eat");
     }
 
     public static boolean isSpeedCookie(ItemStack item) {

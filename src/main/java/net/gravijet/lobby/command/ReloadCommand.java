@@ -15,12 +15,12 @@ public class ReloadCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("lobby.reload")) {
-            sender.sendMessage("§cNo permission!");
+            plugin.getMessages().send(sender, "general.no-permission");
             return true;
         }
 
         plugin.reloadPluginConfig();
-        sender.sendMessage("§aConfiguration reloaded successfully!");
+        plugin.getMessages().send(sender, "reload.success");
         return true;
     }
 }

@@ -1,6 +1,7 @@
 package net.gravijet.lobby.command;
 
 import net.gravijet.lobby.Main;
+import net.gravijet.lobby.MessagesManager;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -16,37 +17,39 @@ public class FlyCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        MessagesManager msg = plugin.getMessages();
+
         if (args.length == 0) {
             if (!(sender instanceof Player)) {
-                sender.sendMessage("§cUsage: /fly <player>");
+                msg.send(sender, "fly.usage");
                 return true;
             }
             Player player = (Player) sender;
             if (!player.hasPermission("lobby.fly")) {
-                player.sendMessage("§cNo permission!");
+                msg.send(player, "general.no-permission");
                 return true;
             }
             if (player.getAllowFlight()) {
                 player.setAllowFlight(false);
                 player.setFlying(false);
                 plugin.setFlightPreference(player, false);
-                player.sendMessage("§cFly disabled!");
+                msg.send(player, "fly.disabled");
             } else {
                 plugin.setFlightPreference(player, true);
                 plugin.restoreFlightState(player);
-                player.sendMessage("§aFly enabled!");
+                msg.send(player, "fly.enabled");
             }
             return true;
         }
 
         if (!sender.hasPermission("lobby.fly.other")) {
-            sender.sendMessage("§cYou don't have permission to toggle fly for others!");
+            msg.send(sender, "fly.no-permission-others");
             return true;
         }
 
         Player target = Bukkit.getPlayer(args[0]);
         if (target == null) {
-            sender.sendMessage("§cPlayer not found!");
+            msg.send(sender, "general.player-not-found");
             return true;
         }
 
@@ -54,13 +57,13 @@ public class FlyCommand implements CommandExecutor {
             target.setAllowFlight(false);
             target.setFlying(false);
             plugin.setFlightPreference(target, false);
-            target.sendMessage("§cFly disabled by " + sender.getName() + "!");
-            sender.sendMessage("§cFly disabled for " + target.getName() + "!");
+            msg.send(target, "fly.disabled-by", "player", sender.getName());
+            msg.send(sender, "fly.disabled-for", "player", target.getName());
         } else {
             plugin.setFlightPreference(target, true);
             plugin.restoreFlightState(target);
-            target.sendMessage("§aFly enabled by " + sender.getName() + "!");
-            sender.sendMessage("§aFly enabled for " + target.getName() + "!");
+            msg.send(target, "fly.enabled-by", "player", sender.getName());
+            msg.send(sender, "fly.enabled-for", "player", target.getName());
         }
         return true;
     }

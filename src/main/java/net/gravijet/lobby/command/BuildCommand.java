@@ -1,6 +1,7 @@
 package net.gravijet.lobby.command;
 
 import net.gravijet.lobby.Main;
+import net.gravijet.lobby.MessagesManager;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -16,34 +17,36 @@ public class BuildCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        MessagesManager msg = plugin.getMessages();
+
         if (args.length == 0) {
             if (!(sender instanceof Player)) {
-                sender.sendMessage("§cUsage: /build <player>");
+                msg.send(sender, "build.usage");
                 return true;
             }
             Player player = (Player) sender;
             if (!player.hasPermission("lobby.build")) {
-                player.sendMessage("§cNo permission!");
+                msg.send(player, "general.no-permission");
                 return true;
             }
             if (plugin.isInBuildMode(player)) {
                 plugin.setBuildMode(player, false);
-                player.sendMessage("§cBuild mode disabled!");
+                msg.send(player, "build.disabled");
             } else {
                 plugin.setBuildMode(player, true);
-                player.sendMessage("§aBuild mode enabled!");
+                msg.send(player, "build.enabled");
             }
             return true;
         }
 
         if (!sender.hasPermission("lobby.build.other")) {
-            sender.sendMessage("§cYou don't have permission to toggle build mode for others!");
+            msg.send(sender, "build.no-permission-others");
             return true;
         }
 
         Player target = Bukkit.getPlayer(args[0]);
         if (target == null) {
-            sender.sendMessage("§cPlayer not found!");
+            msg.send(sender, "general.player-not-found");
             return true;
         }
 
@@ -51,11 +54,11 @@ public class BuildCommand implements CommandExecutor {
         plugin.setBuildMode(target, newState);
 
         if (newState) {
-            target.sendMessage("§aBuild mode enabled by " + sender.getName() + "!");
-            sender.sendMessage("§aBuild mode enabled for " + target.getName() + "!");
+            msg.send(target, "build.enabled-by", "player", sender.getName());
+            msg.send(sender, "build.enabled-for", "player", target.getName());
         } else {
-            target.sendMessage("§cBuild mode disabled by " + sender.getName() + "!");
-            sender.sendMessage("§cBuild mode disabled for " + target.getName() + "!");
+            msg.send(target, "build.disabled-by", "player", sender.getName());
+            msg.send(sender, "build.disabled-for", "player", target.getName());
         }
         return true;
     }

@@ -34,6 +34,7 @@ public class Main extends JavaPlugin {
     private ZoneManager zoneManager;
     private VisibilityManager visibilityManager;
     private LobbyBlockManager lobbyBlockManager;
+    private MessagesManager messagesManager;
     private boolean hasPlaceholderAPI = false;
 
     @Override
@@ -41,6 +42,8 @@ public class Main extends JavaPlugin {
         saveDefaultConfig();
         getConfig().options().copyDefaults(true);
         saveConfig();
+
+        messagesManager = new MessagesManager(this);
 
         serverSelectorManager = new ServerSelectorManager(this);
         serverSelectorManager.loadConfig();
@@ -391,6 +394,10 @@ public class Main extends JavaPlugin {
         }
     }
 
+    public MessagesManager getMessages() {
+        return messagesManager;
+    }
+
     public ServerSelectorManager getServerSelectorManager() {
         return serverSelectorManager;
     }
@@ -416,6 +423,8 @@ public class Main extends JavaPlugin {
         if (lobbyBlockManager != null) {
             lobbyBlockManager.reloadLobbyBlocksConfig();
         }
+
+        messagesManager.load();
 
         for (World world : Bukkit.getWorlds()) {
             setupWorld(world);

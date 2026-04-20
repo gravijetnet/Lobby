@@ -1,6 +1,7 @@
 package net.gravijet.lobby.command;
 
 import net.gravijet.lobby.Main;
+import net.gravijet.lobby.MessagesManager;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
@@ -17,41 +18,43 @@ public class SpawnCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        MessagesManager msg = plugin.getMessages();
         Player target;
+
         if (args.length == 0) {
             if (!(sender instanceof Player)) {
-                sender.sendMessage("§cUsage: /spawn <player>");
+                msg.send(sender, "spawn.usage");
                 return true;
             }
             target = (Player) sender;
             if (!target.hasPermission("lobby.spawn")) {
-                target.sendMessage("§cNo permission!");
+                msg.send(target, "general.no-permission");
                 return true;
             }
         } else {
             if (!sender.hasPermission("lobby.spawn.other")) {
-                sender.sendMessage("§cYou don't have permission to teleport others to spawn!");
+                msg.send(sender, "spawn.no-permission-others");
                 return true;
             }
             target = Bukkit.getPlayer(args[0]);
             if (target == null) {
-                sender.sendMessage("§cPlayer not found!");
+                msg.send(sender, "general.player-not-found");
                 return true;
             }
         }
 
         Location spawn = plugin.getSpawnLocation();
         if (spawn == null) {
-            sender.sendMessage("§cSpawn location not set!");
+            msg.send(sender, "spawn.not-set");
             return true;
         }
 
         target.teleport(spawn);
         if (!target.equals(sender)) {
-            target.sendMessage("§aTeleported to spawn by " + sender.getName() + "!");
-            sender.sendMessage("§aTeleported " + target.getName() + " to spawn!");
+            msg.send(target, "spawn.teleported-by", "player", sender.getName());
+            msg.send(sender, "spawn.teleported-for", "player", target.getName());
         } else {
-            sender.sendMessage("§aTeleported to spawn!");
+            msg.send(sender, "spawn.teleported");
         }
         return true;
     }
