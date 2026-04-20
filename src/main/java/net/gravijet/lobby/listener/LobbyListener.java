@@ -179,8 +179,7 @@ public class LobbyListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         ejectAndCancelPearl(player);
-        plugin.setFlightPreference(player, !plugin.isFlightDisabledByUser(player));
-        plugin.saveConfig();
+        plugin.savePlayerFlightPreference(player);
         player.setScoreboard(Bukkit.getScoreboardManager().getNewScoreboard());
         blockDenyCooldowns.remove(player.getUniqueId());
 

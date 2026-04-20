@@ -14,9 +14,6 @@ spawn:
   yaw: -135.0
   pitch: 0.0
 
-# Player visibility settings
-players: {}
-
 # Visibility permission configuration
 # Set the permission node that identifies VIP and Staff players for the visibility filter
 visibility:
@@ -35,8 +32,8 @@ server-selector:
         name: '&cFastbuilder'
         lore:
           - ''
-          - '&7text'
-          - '&7hier'
+          - '&7Practice techniques such as Speed-, God-, and Tellybridging.'
+          - '&7Ideal training for BedWars and competitive scenarios.'
           - ''
           - '&aClick to connect!'
           - '&7%phoenix_server_online_Fastbuilder-1% currently playing'
@@ -48,8 +45,8 @@ server-selector:
         name: '&cPractice'
         lore:
           - ''
-          - '&7text'
-          - '&7hier'
+          - '&7Fight against other players in 1v1, 2v2 duels or parties.'
+          - '&7Choose your kit and prove your skills in various combat mechanics'
           - ''
           - '&aClick to connect!'
           - '&7%phoenix_server_online_Practice-1% currently playing'
@@ -61,8 +58,8 @@ server-selector:
         name: '&cClutches'
         lore:
           - ''
-          - '&7text'
-          - '&7hier'
+          - '&7Practice your clutching skills here and'
+          - '&7never fall in the void again!'
           - ''
           - '&aClick to connect!'
           - '&7%phoenix_server_online_Clutches-1% currently playing'
@@ -74,8 +71,8 @@ server-selector:
         name: '&cFFA'
         lore:
           - ''
-          - '&7text'
-          - '&7hier'
+          - '&7Fight against other players and'
+          - '&7dominate the leaderboards!'
           - ''
           - '&aClick to connect!'
           - '&7%phoenix_server_online_FFA-1% currently playing'

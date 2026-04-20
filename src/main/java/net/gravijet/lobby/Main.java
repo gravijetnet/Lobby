@@ -11,6 +11,8 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -21,6 +23,8 @@ import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.ScoreboardManager;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -29,6 +33,8 @@ public class Main extends JavaPlugin {
 
     private final Set<UUID> buildModePlayers = new HashSet<>();
     private final Set<UUID> flightDisabledByUser = new HashSet<>();
+    private FileConfiguration playersConfig;
+    private File playersFile;
     private ScoreboardManager scoreboardManager;
     private ServerSelectorManager serverSelectorManager;
     private ZoneManager zoneManager;
@@ -37,11 +43,29 @@ public class Main extends JavaPlugin {
     private MessagesManager messagesManager;
     private boolean hasPlaceholderAPI = false;
 
+    private void loadPlayersConfig() {
+        playersFile = new File(getDataFolder(), "players.yml");
+        if (!playersFile.exists()) {
+            try { playersFile.createNewFile(); } catch (IOException e) { getLogger().warning("Could not create players.yml"); }
+        }
+        playersConfig = YamlConfiguration.loadConfiguration(playersFile);
+    }
+
+    private void savePlayersConfig() {
+        if (playersConfig == null || playersFile == null) return;
+        try { playersConfig.save(playersFile); } catch (IOException e) { getLogger().warning("Could not save players.yml"); }
+    }
+
+    public void savePlayerFlightPreference(Player player) {
+        if (playersConfig == null) return;
+        playersConfig.set(player.getUniqueId() + ".prefers-flight", !isFlightDisabledByUser(player));
+        savePlayersConfig();
+    }
+
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        getConfig().options().copyDefaults(true);
-        saveConfig();
+        loadPlayersConfig();
 
         messagesManager = new MessagesManager(this);
 
@@ -95,9 +119,9 @@ public class Main extends JavaPlugin {
         getServer().getMessenger().unregisterOutgoingPluginChannel(this);
         for (Player player : Bukkit.getOnlinePlayers()) {
             boolean prefersFlight = !isFlightDisabledByUser(player);
-            getConfig().set("players." + player.getUniqueId() + ".prefers-flight", prefersFlight);
+            playersConfig.set(player.getUniqueId() + ".prefers-flight", prefersFlight);
         }
-        saveConfig();
+        savePlayersConfig();
 
         // Remove all lobby blocks on disable
         if (lobbyBlockManager != null) {
@@ -132,7 +156,7 @@ public class Main extends JavaPlugin {
             player.teleport(spawn);
         }
 
-        boolean prefersFlight = getConfig().getBoolean("players." + player.getUniqueId() + ".prefers-flight", player.hasPermission("lobby.fly"));
+        boolean prefersFlight = playersConfig.getBoolean(player.getUniqueId() + ".prefers-flight", player.hasPermission("lobby.fly"));
         setFlightPreference(player, prefersFlight);
         restoreFlightState(player);
     }
