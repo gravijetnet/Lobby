@@ -1,2 +1,3 @@
-Bitte mach, dass wenn man einen Diamantblock platziert, dass der dann nach 5 sekunden zu einem emeraldblock wird und dann verschwindet. aktuell wird er nämlich sofort zu sandstone und dann zu redstone, was so aber nicht sein soll bitte.
-es soll bitte keine bypass permissions geben für admins für die zonenblöckeplatzierung. (also admins können auch nicht überall blöcke platzieren, gleich wie die normalen spieler bitte)
+Bitte entferne die extra Sounds, wenn man blöcke in der lobby platziert. es soll nur der ganz normale sound sein und nichts extra bitte.
+Bitte mach auch noch bei den Zonen, dass wenn man keine Permission hat, dass man nicht stuck bleibt und sich nicht bewegen kann am Rand, sondern bitte weggespeckt wird davon. Also wenn man probiert, hineinzugehen, wird man einfach weggespeckt, anstatt stuck zu sein.
+Alles soll auf Englisch bitte sein.
