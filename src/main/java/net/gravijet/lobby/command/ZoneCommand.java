@@ -1,6 +1,7 @@
 package net.gravijet.lobby.command;
 
 import net.gravijet.lobby.Main;
+import net.gravijet.lobby.MessagesManager;
 import net.gravijet.lobby.zone.*;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -21,8 +22,10 @@ public final class ZoneCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        MessagesManager msg = plugin.getMessages();
+
         if (!sender.hasPermission("lobby.zone")) {
-            sender.sendMessage("§cYou don't have permission to use zone commands.");
+            msg.send(sender, "zone.no-permission");
             return true;
         }
 
@@ -35,7 +38,7 @@ public final class ZoneCommand implements CommandExecutor {
 
         if (sub.equals("wand") || sub.equals("save") || sub.equals("clear")) {
             if (!(sender instanceof Player)) {
-                sender.sendMessage("§cThis subcommand can only be used by players.");
+                msg.send(sender, "zone.player-only");
                 return true;
             }
             Player player = (Player) sender;
@@ -86,28 +89,30 @@ public final class ZoneCommand implements CommandExecutor {
     }
 
     private void handleGive(Player player) {
+        MessagesManager msg = plugin.getMessages();
         player.getInventory().addItem(ZoneManager.createWand());
-        player.sendMessage("§aZone Wand given!");
-        player.sendMessage("§7Right-click to add corners, left-click to remove,");
-        player.sendMessage("§7Shift+right-click to preview the selection.");
+        msg.send(player, "zone.wand.given");
+        msg.sendList(player, "zone.wand.instructions");
     }
 
     private void handleSave(Player player, String[] args) {
+        MessagesManager msg = plugin.getMessages();
+
         if (args.length < 2) {
-            player.sendMessage("§cUsage: /zone save <name> [minY] [maxY]");
+            msg.send(player, "zone.save.usage");
             return;
         }
 
         String name = args[1];
         if (name.contains(" ") || name.isEmpty()) {
-            player.sendMessage("§cZone name must not contain spaces.");
+            msg.send(player, "zone.save.invalid-name");
             return;
         }
 
         ZoneSelectionSession session = zoneManager.getSession(player.getUniqueId());
         if (session == null || !session.isComplete()) {
-            player.sendMessage("§cYou need at least 3 corners in your selection!");
-            player.sendMessage("§7Use §e/zone wand §7to get the Zone Wand first.");
+            msg.send(player, "zone.save.not-enough-corners");
+            msg.send(player, "zone.save.use-wand");
             return;
         }
 
@@ -117,113 +122,145 @@ public final class ZoneCommand implements CommandExecutor {
                 minY = Integer.parseInt(args[2]);
                 maxY = Integer.parseInt(args[3]);
             } catch (NumberFormatException e) {
-                player.sendMessage("§cminY and maxY must be integers.");
+                msg.send(player, "zone.save.invalid-y");
                 return;
             }
             if (minY > maxY) {
-                player.sendMessage("§cminY (" + minY + ") must be <= maxY (" + maxY + ").");
+                msg.send(player, "zone.save.y-mismatch",
+                        "miny", String.valueOf(minY),
+                        "maxy", String.valueOf(maxY));
                 return;
             }
         } else if (args.length == 3) {
-            player.sendMessage("§cProvide both minY and maxY, or neither.");
+            msg.send(player, "zone.save.incomplete-y");
             return;
         }
 
         try {
             Zone zone = zoneManager.saveZone(name, session, minY, maxY);
             zoneManager.clearSession(player.getUniqueId());
-            player.sendMessage("§aZone §f'" + zone.getName() + "' §asaved with §f" + zone.getCorners().size() + " §acorners" + (minY == 0 && maxY == 256 ? " (full height)." : " (Y: " + minY + "–" + maxY + ")."));
+            if (minY == 0 && maxY == 256) {
+                msg.send(player, "zone.save.saved-full",
+                        "name", zone.getName(),
+                        "corners", String.valueOf(zone.getCorners().size()));
+            } else {
+                msg.send(player, "zone.save.saved-y",
+                        "name", zone.getName(),
+                        "corners", String.valueOf(zone.getCorners().size()),
+                        "miny", String.valueOf(minY),
+                        "maxy", String.valueOf(maxY));
+            }
         } catch (IllegalArgumentException e) {
-            player.sendMessage("§c" + e.getMessage());
+            msg.send(player, "zone.save.error", "error", e.getMessage());
         }
     }
 
     private void handleDelete(CommandSender sender, String[] args) {
+        MessagesManager msg = plugin.getMessages();
         if (args.length < 2) {
-            sender.sendMessage("§cUsage: /zone delete <name>");
+            msg.send(sender, "zone.delete.usage");
             return;
         }
         if (zoneManager.deleteZone(args[1])) {
-            sender.sendMessage("§aZone §f'" + args[1] + "' §adeleted.");
+            msg.send(sender, "zone.delete.deleted", "name", args[1]);
         } else {
-            sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
+            msg.send(sender, "zone.delete.not-found", "name", args[1]);
         }
     }
 
     private void handleList(CommandSender sender) {
+        MessagesManager msg = plugin.getMessages();
         Collection<Zone> all = zoneManager.getAllZones();
         if (all.isEmpty()) {
-            sender.sendMessage("§7No zones are currently defined.");
+            msg.send(sender, "zone.list.empty");
             return;
         }
-        sender.sendMessage("§6Zones §7(" + all.size() + "):");
+        msg.send(sender, "zone.list.header", "count", String.valueOf(all.size()));
         int i = 1;
         for (Zone zone : all) {
             String marker = zone.isRestricted() ? " §c[VIP: " + zone.getRequiredPermission() + "]" : "";
-            sender.sendMessage(String.format("§7  %d. §f%s §8[%s, Y:%d–%d, %d corners]%s", i++, zone.getName(), zone.getWorldName(), zone.getMinY(), zone.getMaxY(), zone.getCorners().size(), marker));
+            sender.sendMessage(msg.format("zone.list.entry",
+                    "index", String.valueOf(i++),
+                    "name", zone.getName(),
+                    "world", zone.getWorldName(),
+                    "miny", String.valueOf(zone.getMinY()),
+                    "maxy", String.valueOf(zone.getMaxY()),
+                    "corners", String.valueOf(zone.getCorners().size()),
+                    "marker", marker));
         }
     }
 
     private void handleClear(Player player) {
         zoneManager.clearSession(player.getUniqueId());
-        player.sendMessage("§aSelection cleared.");
+        plugin.getMessages().send(player, "zone.clear.cleared");
     }
 
     private void handleInfo(CommandSender sender, String[] args) {
+        MessagesManager msg = plugin.getMessages();
         if (args.length < 2) {
-            sender.sendMessage("§cUsage: /zone info <name>");
+            msg.send(sender, "zone.info.usage");
             return;
         }
         Zone zone = zoneManager.getZone(args[1]);
         if (zone == null) {
-            sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
+            msg.send(sender, "zone.info.not-found", "name", args[1]);
             return;
         }
-        sender.sendMessage("§6§l--- Zone: " + zone.getName() + " ---");
-        sender.sendMessage("§7World:   §f" + zone.getWorldName());
-        sender.sendMessage("§7Y-range: §f" + zone.getMinY() + " §8– §f" + zone.getMaxY());
-        sender.sendMessage("§7Corners: §f" + zone.getCorners().size());
+        msg.send(sender, "zone.info.header", "name", zone.getName());
+        msg.send(sender, "zone.info.world", "world", zone.getWorldName());
+        msg.send(sender, "zone.info.y-range",
+                "miny", String.valueOf(zone.getMinY()),
+                "maxy", String.valueOf(zone.getMaxY()));
+        msg.send(sender, "zone.info.corners-count", "count", String.valueOf(zone.getCorners().size()));
         int idx = 1;
         for (int[] c : zone.getCorners()) {
-            sender.sendMessage(String.format("§7  #%d §8» §f(%d, %d)", idx++, c[0], c[1]));
+            sender.sendMessage(msg.format("zone.info.corner-entry",
+                    "index", String.valueOf(idx++),
+                    "x", String.valueOf(c[0]),
+                    "z", String.valueOf(c[1])));
         }
         if (zone.isRestricted()) {
-            sender.sendMessage("§7Permission: §c" + zone.getRequiredPermission());
-            sender.sendMessage("§7Deny msg:   §f" + zone.getDenyMessage());
+            msg.send(sender, "zone.info.permission-required", "permission", zone.getRequiredPermission());
+            msg.send(sender, "zone.info.deny-msg", "message", zone.getDenyMessage());
         } else {
-            sender.sendMessage("§7Permission: §anone (open to all)");
+            msg.send(sender, "zone.info.permission-open");
         }
-        sender.sendMessage("§7Block placement: §f" + (zone.isAllowBlockPlacement() ? "§aallowed" : "§cdenied"));
-        sender.sendMessage("§7Flight:          §f" + (zone.isAllowFlight() ? "§aallowed" : "§cdisabled"));
+        msg.send(sender, "zone.info.block-placement",
+                "status", zone.isAllowBlockPlacement() ? "§aallowed" : "§cdenied");
+        msg.send(sender, "zone.info.flight",
+                "status", zone.isAllowFlight() ? "§aallowed" : "§cdisabled");
     }
 
     private void handleSetPerm(CommandSender sender, String[] args) {
+        MessagesManager msg = plugin.getMessages();
         if (args.length < 3) {
-            sender.sendMessage("§cUsage: /zone setperm <name> <permission>");
+            msg.send(sender, "zone.setperm.usage");
             return;
         }
         if (zoneManager.setZonePermission(args[1], args[2])) {
-            sender.sendMessage("§aZone §f'" + args[1] + "' §anow requires permission §f" + args[2] + "§a.");
+            msg.send(sender, "zone.setperm.set", "name", args[1], "permission", args[2]);
         } else {
-            sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
+            msg.send(sender, "zone.setperm.not-found", "name", args[1]);
         }
     }
 
     private void handleClearPerm(CommandSender sender, String[] args) {
+        MessagesManager msg = plugin.getMessages();
         if (args.length < 2) {
-            sender.sendMessage("§cUsage: /zone clearperm <name>");
+            msg.send(sender, "zone.clearperm.usage");
             return;
         }
         if (zoneManager.setZonePermission(args[1], null)) {
-            sender.sendMessage("§aPermission restriction removed from zone §f'" + args[1] + "' §a(now open to all).");
+            msg.send(sender, "zone.clearperm.cleared", "name", args[1]);
         } else {
-            sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
+            msg.send(sender, "zone.clearperm.not-found", "name", args[1]);
         }
     }
 
     private void handleSetMessage(CommandSender sender, String[] args) {
+        MessagesManager msg = plugin.getMessages();
         if (args.length < 3) {
-            sender.sendMessage("§cUsage: /zone setmessage <name> <message...>");
+            msg.send(sender, "zone.setmessage.usage");
             return;
         }
         StringBuilder sb = new StringBuilder();
@@ -232,15 +269,16 @@ public final class ZoneCommand implements CommandExecutor {
             sb.append(args[i]);
         }
         if (zoneManager.setZoneDenyMessage(args[1], sb.toString().replace("\\n", "\n"))) {
-            sender.sendMessage("§aDeny-message for zone §f'" + args[1] + "' §aset.");
+            msg.send(sender, "zone.setmessage.set", "name", args[1]);
         } else {
-            sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
+            msg.send(sender, "zone.setmessage.not-found", "name", args[1]);
         }
     }
 
     private void handleSetFlight(CommandSender sender, String[] args) {
+        MessagesManager msg = plugin.getMessages();
         if (args.length < 3) {
-            sender.sendMessage("§cUsage: /zone setflight <name> <true|false>");
+            msg.send(sender, "zone.setflight.usage");
             return;
         }
         String val = args[2].toLowerCase();
@@ -250,19 +288,22 @@ public final class ZoneCommand implements CommandExecutor {
         } else if (val.equals("false") || val.equals("no") || val.equals("0")) {
             allow = false;
         } else {
-            sender.sendMessage("§cValue must be true or false.");
+            msg.send(sender, "zone.setflight.invalid-value");
             return;
         }
         if (zoneManager.setZoneAllowFlight(args[1], allow)) {
-            sender.sendMessage("§aZone §f'" + args[1] + "' §aflight set to: §f" + (allow ? "allowed" : "disabled"));
+            msg.send(sender, "zone.setflight.set",
+                    "name", args[1],
+                    "status", allow ? "allowed" : "disabled");
         } else {
-            sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
+            msg.send(sender, "zone.setflight.not-found", "name", args[1]);
         }
     }
 
     private void handleSetBlockPlace(CommandSender sender, String[] args) {
+        MessagesManager msg = plugin.getMessages();
         if (args.length < 3) {
-            sender.sendMessage("§cUsage: /zone setblockplace <name> <true|false>");
+            msg.send(sender, "zone.setblockplace.usage");
             return;
         }
         String val = args[2].toLowerCase();
@@ -272,28 +313,19 @@ public final class ZoneCommand implements CommandExecutor {
         } else if (val.equals("false") || val.equals("no") || val.equals("0")) {
             allow = false;
         } else {
-            sender.sendMessage("§cValue must be true or false.");
+            msg.send(sender, "zone.setblockplace.invalid-value");
             return;
         }
         if (zoneManager.setZoneAllowBlockPlacement(args[1], allow)) {
-            sender.sendMessage("§aZone §f'" + args[1] + "' §ablock placement set to: §f" + allow);
+            msg.send(sender, "zone.setblockplace.set",
+                    "name", args[1],
+                    "status", String.valueOf(allow));
         } else {
-            sender.sendMessage("§cNo zone named §f'" + args[1] + "' §cfound.");
+            msg.send(sender, "zone.setblockplace.not-found", "name", args[1]);
         }
     }
 
     private void sendUsage(CommandSender sender) {
-        sender.sendMessage("§c§lGraviJet §7» §f§lZone §8- §7Commands");
-        sender.sendMessage("§4● §c/zone wand §7» §fGet the Zone Wand");
-        sender.sendMessage("§4● §c/zone save <name> [minY maxY] §7» §fSave selection as zone");
-        sender.sendMessage("§4● §c/zone delete <name> §7» §fDelete a zone");
-        sender.sendMessage("§4● §c/zone list §7» §fList all zones");
-        sender.sendMessage("§4● §c/zone clear §7» §fClear your selection");
-        sender.sendMessage("§4● §c/zone info <name> §7» §fShow zone details");
-        sender.sendMessage("§4● §c/zone setperm <name> <permission> §7» §fRestrict zone");
-        sender.sendMessage("§4● §c/zone clearperm <name> §7» §fRemove restriction");
-        sender.sendMessage("§4● §c/zone setmessage <name> <msg...> §7» §fSet deny message");
-        sender.sendMessage("§4● §c/zone setblockplace <name> <true|false> §7» §fBlock placement");
-        sender.sendMessage("§4● §c/zone setflight <name> <true|false> §7» §fAllow/disable flight");
+        plugin.getMessages().sendList(sender, "zone.help");
     }
 }

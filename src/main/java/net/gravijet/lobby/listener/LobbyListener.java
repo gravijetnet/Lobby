@@ -256,7 +256,7 @@ public class LobbyListener implements Listener {
         Long last = blockDenyCooldowns.get(player.getUniqueId());
         if (last != null && now - last < BLOCK_DENY_COOLDOWN_MS) return;
         blockDenyCooldowns.put(player.getUniqueId(), now);
-        player.sendMessage("§cYou cannot place blocks in this zone!");
+        plugin.getMessages().send(player, "lobby-block.cannot-place");
     }
 
     @EventHandler(priority = EventPriority.HIGH)

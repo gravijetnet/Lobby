@@ -1,0 +1,156 @@
+# ============================================================
+# LobbyPlugin - Messages Configuration
+# Use & for color codes  (&a green, &c red, &f white, etc.)
+# Use {placeholder} for dynamic values.
+# Set any message to "" to disable it (nothing will be sent).
+# ============================================================
+
+general:
+  no-permission: "&cNo permission!"
+  player-only: "&cThis command can only be used by players."
+  player-not-found: "&cPlayer not found!"
+
+build:
+  usage: "&cUsage: /build <player>"
+  enabled: "&aBuild mode enabled!"
+  disabled: "&cBuild mode disabled!"
+  no-permission-others: "&cYou don't have permission to toggle build mode for others!"
+  enabled-by: "&aBuild mode enabled by {player}!"
+  enabled-for: "&aBuild mode enabled for {player}!"
+  disabled-by: "&cBuild mode disabled by {player}!"
+  disabled-for: "&cBuild mode disabled for {player}!"
+
+fly:
+  usage: "&cUsage: /fly <player>"
+  enabled: "&aFly enabled!"
+  disabled: "&cFly disabled!"
+  no-permission-others: "&cYou don't have permission to toggle fly for others!"
+  enabled-by: "&aFly enabled by {player}!"
+  enabled-for: "&aFly enabled for {player}!"
+  disabled-by: "&cFly disabled by {player}!"
+  disabled-for: "&cFly disabled for {player}!"
+
+spawn:
+  usage: "&cUsage: /spawn <player>"
+  no-permission-others: "&cYou don't have permission to teleport others to spawn!"
+  not-set: "&cSpawn location not set!"
+  teleported: "&aTeleported to spawn!"
+  teleported-by: "&aTeleported to spawn by {player}!"
+  teleported-for: "&aTeleported {player} to spawn!"
+
+setspawn:
+  set: "&aSpawn location set!"
+
+reload:
+  success: "&aConfiguration reloaded successfully!"
+
+speedcookie:
+  cooldown: "&cYou must wait &e{time}&c more."
+  received-menu: "&aYou received a &bSpeed Cookie&a!"
+  received-eat: "&aYou received &bSpeed II &afor &b10 minutes&a!"
+
+selector:
+  not-configured: "&cServer selector is not configured."
+  connect-failed: "&cCould not connect to server: {server}"
+
+# Set to "" to show no message when lobby blocks cannot be placed.
+lobby-block:
+  cannot-place: ""
+
+zone:
+  restricted-teleported: "&cYou were in a restricted area! Teleported to spawn."
+  restricted-leave: "&cYou are in a restricted area! Leave immediately."
+  no-permission: "&cYou don't have permission to use zone commands."
+  player-only: "&cThis subcommand can only be used by players."
+
+  help:
+    - "&c&lGraviJet &7» &f&lZone &8- &7Commands"
+    - "&4\u25cf &c/zone wand &7» &fGet the Zone Wand"
+    - "&4\u25cf &c/zone save <name> [minY maxY] &7» &fSave selection as zone"
+    - "&4\u25cf &c/zone delete <name> &7» &fDelete a zone"
+    - "&4\u25cf &c/zone list &7» &fList all zones"
+    - "&4\u25cf &c/zone clear &7» &fClear your selection"
+    - "&4\u25cf &c/zone info <name> &7» &fShow zone details"
+    - "&4\u25cf &c/zone setperm <name> <permission> &7» &fRestrict zone"
+    - "&4\u25cf &c/zone clearperm <name> &7» &fRemove restriction"
+    - "&4\u25cf &c/zone setmessage <name> <msg...> &7» &fSet deny message"
+    - "&4\u25cf &c/zone setblockplace <name> <true|false> &7» &fBlock placement"
+    - "&4\u25cf &c/zone setflight <name> <true|false> &7» &fAllow/disable flight"
+
+  wand:
+    given: "&aZone Wand given!"
+    instructions:
+      - "&7Right-click to add corners, left-click to remove,"
+      - "&7Shift+right-click to preview the selection."
+    corner-removed: "&cRemoved last corner. &7({count} remaining)"
+    no-corners: "&cNo corners to remove."
+    wrong-world: "&cAll corners must be in the same world!"
+    corner-added: "&aCorner &f#{index} &aadded at &f({x}, {z})&a. &7[{total} total{suffix}]"
+    complete-suffix: " \u2014 &apolygon ready&7"
+    incomplete-suffix: " \u2014 need {remaining} more"
+
+  save:
+    usage: "&cUsage: /zone save <name> [minY] [maxY]"
+    invalid-name: "&cZone name must not contain spaces."
+    not-enough-corners: "&cYou need at least 3 corners in your selection!"
+    use-wand: "&7Use &e/zone wand &7to get the Zone Wand first."
+    invalid-y: "&cminY and maxY must be integers."
+    y-mismatch: "&cminY ({miny}) must be <= maxY ({maxy})."
+    incomplete-y: "&cProvide both minY and maxY, or neither."
+    saved-full: "&aZone &f'{name}' &asaved with &f{corners} &acorners (full height)."
+    saved-y: "&aZone &f'{name}' &asaved with &f{corners} &acorners (Y: {miny}\u2013{maxy})."
+    error: "&c{error}"
+
+  delete:
+    usage: "&cUsage: /zone delete <name>"
+    deleted: "&aZone &f'{name}' &adeleted."
+    not-found: "&cNo zone named &f'{name}' &cfound."
+
+  list:
+    empty: "&7No zones are currently defined."
+    header: "&6Zones &7({count}):"
+    entry: "&7  {index}. &f{name} &8[{world}, Y:{miny}\u2013{maxy}, {corners} corners]{marker}"
+
+  clear:
+    cleared: "&aSelection cleared."
+
+  info:
+    usage: "&cUsage: /zone info <name>"
+    not-found: "&cNo zone named &f'{name}' &cfound."
+    header: "&6&l--- Zone: {name} ---"
+    world: "&7World:   &f{world}"
+    y-range: "&7Y-range: &f{miny} &8\u2013 &f{maxy}"
+    corners-count: "&7Corners: &f{count}"
+    corner-entry: "&7  #{index} &8\u00bb &f({x}, {z})"
+    permission-required: "&7Permission: &c{permission}"
+    deny-msg: "&7Deny msg:   &f{message}"
+    permission-open: "&7Permission: &anone (open to all)"
+    block-placement: "&7Block placement: &f{status}"
+    flight: "&7Flight:          &f{status}"
+
+  setperm:
+    usage: "&cUsage: /zone setperm <name> <permission>"
+    set: "&aZone &f'{name}' &anow requires permission &f{permission}&a."
+    not-found: "&cNo zone named &f'{name}' &cfound."
+
+  clearperm:
+    usage: "&cUsage: /zone clearperm <name>"
+    cleared: "&aPermission restriction removed from zone &f'{name}' &a(now open to all)."
+    not-found: "&cNo zone named &f'{name}' &cfound."
+
+  setmessage:
+    usage: "&cUsage: /zone setmessage <name> <message...>"
+    set: "&aDeny-message for zone &f'{name}' &aset."
+    not-found: "&cNo zone named &f'{name}' &cfound."
+
+  setflight:
+    usage: "&cUsage: /zone setflight <name> <true|false>"
+    invalid-value: "&cValue must be true or false."
+    set: "&aZone &f'{name}' &aflight set to: &f{status}"
+    not-found: "&cNo zone named &f'{name}' &cfound."
+
+  setblockplace:
+    usage: "&cUsage: /zone setblockplace <name> <true|false>"
+    invalid-value: "&cValue must be true or false."
+    set: "&aZone &f'{name}' &ablock placement set to: &f{status}"
+    not-found: "&cNo zone named &f'{name}' &cfound."

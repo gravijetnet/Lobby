@@ -35,7 +35,7 @@ public class ServerSelectorManager {
         ConfigurationSection menuConfig = config.getConfigurationSection("server-selector.default");
 
         if (menuConfig == null) {
-            player.sendMessage("§cServer selector is not configured.");
+            plugin.getMessages().send(player, "selector.not-configured");
             return;
         }
 
@@ -143,7 +143,7 @@ public class ServerSelectorManager {
             out.writeUTF(server);
             player.sendPluginMessage(plugin, "BungeeCord", out.toByteArray());
         } catch (Exception e) {
-            player.sendMessage("§cCould not connect to server: " + server);
+            plugin.getMessages().send(player, "selector.connect-failed", "server", server);
         }
     }
 }

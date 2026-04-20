@@ -128,9 +128,10 @@ public final class ZoneListener implements Listener {
         if (action == Action.LEFT_CLICK_BLOCK || action == Action.LEFT_CLICK_AIR) {
             ZoneSelectionSession session = zoneManager.getOrCreateSession(player.getUniqueId());
             if (session.removeLastCorner()) {
-                player.sendMessage("§cRemoved last corner. §7(" + session.size() + " remaining)");
+                plugin.getMessages().send(player, "zone.wand.corner-removed",
+                        "count", String.valueOf(session.size()));
             } else {
-                player.sendMessage("§cNo corners to remove.");
+                plugin.getMessages().send(player, "zone.wand.no-corners");
             }
             return;
         }
@@ -151,18 +152,21 @@ public final class ZoneListener implements Listener {
 
             if (!session.isEmpty() && session.getWorldName() != null
                     && !session.getWorldName().equals(cornerLoc.getWorld().getName())) {
-                player.sendMessage("§cAll corners must be in the same world!");
+                plugin.getMessages().send(player, "zone.wand.wrong-world");
                 return;
             }
 
             int index = session.addCorner(cornerLoc);
-            player.sendMessage(String.format(
-                "§aCorner §f#%d §aadded at §f(%d, %d)§a. §7[%d total%s]",
-                index,
-                cornerLoc.getBlockX(), cornerLoc.getBlockZ(),
-                session.size(),
-                session.isComplete() ? " — §apolygon ready§7" : " — need " + (3 - session.size()) + " more"
-            ));
+            String suffix = session.isComplete()
+                    ? plugin.getMessages().get("zone.wand.complete-suffix")
+                    : plugin.getMessages().format("zone.wand.incomplete-suffix",
+                            "remaining", String.valueOf(3 - session.size()));
+            player.sendMessage(plugin.getMessages().format("zone.wand.corner-added",
+                    "index", String.valueOf(index),
+                    "x", String.valueOf(cornerLoc.getBlockX()),
+                    "z", String.valueOf(cornerLoc.getBlockZ()),
+                    "total", String.valueOf(session.size()),
+                    "suffix", suffix));
         }
     }
 
@@ -201,26 +205,27 @@ public final class ZoneListener implements Listener {
                 double dz = from.getZ() - boundary.getZ();
                 depth = Math.sqrt(dx * dx + dz * dz);
             }
-            final double strength = Math.max(0.4, Math.min(0.4 + depth * 0.6, 3.5));
+            final double strength = Math.max(0.45, Math.min(0.45 + depth * 0.4, 1.2));
             final Zone finalDenied = denied;
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (!player.isOnline()) return;
                 applyKnockback(player, finalDenied, strength);
             });
         } else {
-            // Entering from outside: teleport player 2 blocks back so they cannot get stuck
+            // Entering from outside: arc-bounce like a slime block
             final Location pushFrom = from.clone();
             final Location pushTo = to.clone();
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (!player.isOnline()) return;
                 Vector dir = pushFrom.toVector().subtract(pushTo.toVector());
-                Location dest = pushFrom.clone();
+                Vector vel;
                 if (dir.lengthSquared() > 0.001) {
-                    dest = pushFrom.clone().add(dir.normalize().multiply(2.0));
+                    vel = dir.setY(0).normalize().multiply(0.55);
+                } else {
+                    vel = new Vector(0, 0, 0);
                 }
-                dest.setYaw(player.getLocation().getYaw());
-                dest.setPitch(player.getLocation().getPitch());
-                player.teleport(dest);
+                vel.setY(0.45);
+                player.setVelocity(vel);
             });
         }
     }
@@ -245,7 +250,7 @@ public final class ZoneListener implements Listener {
         }
         double len = Math.sqrt(dx * dx + dz * dz);
         if (len > 0.01) {
-            player.setVelocity(new Vector(dx / len * strength, 0.3, dz / len * strength));
+            player.setVelocity(new Vector(dx / len * strength, 0.45, dz / len * strength));
         } else {
             player.setVelocity(new Vector(0, 0.5, 0));
         }
@@ -260,14 +265,14 @@ public final class ZoneListener implements Listener {
         Location spawn = plugin.getSpawnLocation();
         if (spawn != null && zoneManager.getDeniedZoneAt(player, spawn) == null) {
             player.teleport(spawn);
-            player.sendMessage("§cYou were in a restricted area! Teleported to spawn.");
+            plugin.getMessages().send(player, "zone.restricted-teleported");
         } else {
             Location safe = calcSafePosition(player.getLocation(), denied);
             if (safe != null) {
                 player.teleport(safe);
                 sendDenyMessage(player, denied);
             } else {
-                player.sendMessage("§cYou are in a restricted area! Leave immediately.");
+                plugin.getMessages().send(player, "zone.restricted-leave");
             }
         }
     }

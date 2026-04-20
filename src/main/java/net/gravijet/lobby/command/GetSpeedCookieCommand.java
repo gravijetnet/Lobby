@@ -31,7 +31,7 @@ public class GetSpeedCookieCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage("§cThis command can only be used by players.");
+            plugin.getMessages().send(sender, "general.player-only");
             return true;
         }
         openMenu((Player) sender);
@@ -55,13 +55,13 @@ public class GetSpeedCookieCommand implements CommandExecutor {
         UUID uuid      = player.getUniqueId();
         long remaining = getRemainingCooldown(uuid);
         if (remaining > 0) {
-            player.sendMessage("§cYou must wait §e" + formatTime(remaining) + "§c more.");
+            plugin.getMessages().send(player, "speedcookie.cooldown", "time", formatTime(remaining));
             return;
         }
         cooldowns.put(uuid, System.currentTimeMillis());
         player.getInventory().addItem(buildGiveCookieItem());
         player.closeInventory();
-        player.sendMessage("§aYou received a §bSpeed Cookie§a!");
+        plugin.getMessages().send(player, "speedcookie.received-menu");
     }
 
     public ItemStack buildMenuCookieItem(UUID uuid) {
