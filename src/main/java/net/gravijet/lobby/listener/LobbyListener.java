@@ -8,7 +8,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.entity.EnderPearl;
 import org.bukkit.entity.ItemFrame;
@@ -453,9 +452,6 @@ public class LobbyListener implements Listener {
 
         lobbyBlockManager.addLobbyBlock(loc);
 
-        // Play placement sound
-      //  loc.getWorld().playSound(loc, Sound.DIG_STONE, 0.8f, 1.2f);
-
         final Material colorBlock = (itemType == Material.DIAMOND_BLOCK)
             ? Material.EMERALD_BLOCK
             : Material.REDSTONE_BLOCK;
@@ -464,7 +460,6 @@ public class LobbyListener implements Listener {
         int t1 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (loc.getBlock().getType() == itemType) {
                 loc.getBlock().setType(colorBlock);
-                //loc.getWorld().playSound(loc, Sound.NOTE_PLING, 0.6f, 1.4f);
             }
         }, 100L).getTaskId();
 
@@ -474,7 +469,6 @@ public class LobbyListener implements Listener {
             lobbyBlockManager.removeLobbyBlock(loc);
             if (loc.getBlock().getType() == colorBlock) {
                 loc.getBlock().setType(Material.AIR);
-                //loc.getWorld().playSound(loc, Sound.POP, 0.5f, 1.5f);
             }
         }, 140L).getTaskId();
 

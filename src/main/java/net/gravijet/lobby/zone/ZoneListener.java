@@ -192,32 +192,35 @@ public final class ZoneListener implements Listener {
         Zone deniedFrom = zoneManager.getDeniedZoneAt(player, from);
         boolean alreadyInside = deniedFrom != null && deniedFrom.getName().equals(denied.getName());
 
-        // Calculate depth (distance from player to nearest zone boundary)
-        double depth = 0;
         if (alreadyInside) {
+            // Player is already inside — apply knockback to push them out
             Location boundary = ZoneManager.findNearestBoundaryPoint(from, denied);
+            double depth = 0;
             if (boundary != null) {
                 double dx = from.getX() - boundary.getX();
                 double dz = from.getZ() - boundary.getZ();
                 depth = Math.sqrt(dx * dx + dz * dz);
             }
-        }
-
-        // Knockback strength: 0.4 base + 0.6 per block of depth, capped at 3.5
-        final double strength = Math.max(0.4, Math.min(0.4 + depth * 0.6, 3.5));
-        final Zone finalDenied = denied;
-
-        if (alreadyInside) {
+            final double strength = Math.max(0.4, Math.min(0.4 + depth * 0.6, 3.5));
+            final Zone finalDenied = denied;
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (!player.isOnline()) return;
                 applyKnockback(player, finalDenied, strength);
-                // ejectToSpawn handles being stuck; periodic task will catch prolonged cases
             });
         } else {
-            // Entering from outside: event cancellation holds player at `from`, apply knockback away
+            // Entering from outside: teleport player 2 blocks back so they cannot get stuck
+            final Location pushFrom = from.clone();
+            final Location pushTo = to.clone();
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (!player.isOnline()) return;
-                applyKnockback(player, finalDenied, strength);
+                Vector dir = pushFrom.toVector().subtract(pushTo.toVector());
+                Location dest = pushFrom.clone();
+                if (dir.lengthSquared() > 0.001) {
+                    dest = pushFrom.clone().add(dir.normalize().multiply(2.0));
+                }
+                dest.setYaw(player.getLocation().getYaw());
+                dest.setPitch(player.getLocation().getPitch());
+                player.teleport(dest);
             });
         }
     }
