@@ -32,8 +32,8 @@ server-selector:
         name: '&cFastbuilder'
         lore:
           - ''
-          - '&7Practice techniques such as Speed-, God-, and Tellybridging.'
-          - '&7Ideal training for BedWars and competitive scenarios.'
+          - '&7Practice advanced bridging techniques'
+          - '&7and beat the world records.'
           - ''
           - '&aClick to connect!'
           - '&7%phoenix_server_online_Fastbuilder-1% currently playing'
@@ -45,8 +45,8 @@ server-selector:
         name: '&cPractice'
         lore:
           - ''
-          - '&7Fight against other players in 1v1, 2v2 duels or parties.'
-          - '&7Choose your kit and prove your skills in various combat mechanics'
+          - '&7Fight against other players in 1v1 or'
+          - '&72v2 duels, parties, events and more.'
           - ''
           - '&aClick to connect!'
           - '&7%phoenix_server_online_Practice-1% currently playing'
@@ -58,8 +58,8 @@ server-selector:
         name: '&cClutches'
         lore:
           - ''
-          - '&7Practice your clutching skills here and'
-          - '&7never fall in the void again!'
+          - '&7Practice your clutching skills here'
+          - '&7and never fall in the void again!'
           - ''
           - '&aClick to connect!'
           - '&7%phoenix_server_online_Clutches-1% currently playing'
