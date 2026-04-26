@@ -235,14 +235,14 @@ public class LobbyListener implements Listener {
         Bukkit.getScheduler().runTask(plugin, () -> {
             ItemStack slot4 = player.getInventory().getItem(4);
             boolean isNamedLobbyBlock = slot4 != null && slot4.hasItemMeta()
-                && "§cLobby Blocks".equals(slot4.getItemMeta().getDisplayName())
+                && "§cBlocks".equals(slot4.getItemMeta().getDisplayName())
                 && (slot4.getType() == Material.SANDSTONE || slot4.getType() == Material.DIAMOND_BLOCK);
             if (isNamedLobbyBlock) {
                 slot4.setAmount(64);
             } else {
                 ItemStack fresh = new ItemStack(Material.SANDSTONE, 64);
                 ItemMeta meta = fresh.getItemMeta();
-                meta.setDisplayName("§cLobby Blocks");
+                meta.setDisplayName("§cBlocks");
                 fresh.setItemMeta(meta);
                 player.getInventory().setItem(4, fresh);
             }
@@ -485,7 +485,7 @@ public class LobbyListener implements Listener {
         if (item == null) return false;
         // Any diamond block is always allowed as a lobby block
         if (item.getType() == Material.DIAMOND_BLOCK) return true;
-        return item.getType() == Material.SANDSTONE && item.hasItemMeta() && "§cLobby Blocks".equals(item.getItemMeta().getDisplayName());
+        return item.getType() == Material.SANDSTONE && item.hasItemMeta() && "§cBlocks".equals(item.getItemMeta().getDisplayName());
     }
 
     private boolean isLobbyItem(ItemStack item) {
