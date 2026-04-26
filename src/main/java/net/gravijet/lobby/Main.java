@@ -182,7 +182,7 @@ public class Main extends JavaPlugin {
 
         ItemStack lobbyBlocks = new ItemStack(Material.SANDSTONE, 64);
         ItemMeta lobbyMeta = lobbyBlocks.getItemMeta();
-        lobbyMeta.setDisplayName("§cLobby Blocks");
+        lobbyMeta.setDisplayName("§cBlocks");
         lobbyBlocks.setItemMeta(lobbyMeta);
         player.getInventory().setItem(4, lobbyBlocks);
 
