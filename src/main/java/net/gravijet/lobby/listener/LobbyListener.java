@@ -148,12 +148,22 @@ public class LobbyListener implements Listener {
                 continue;
             }
 
-            // Limit speed to prevent phasing
-            Vector velocity = pearl.getVelocity();
-            double speed = velocity.length();
-            if (speed > MAX_PEARL_SPEED) { // Limit maximum speed
-                velocity.normalize().multiply(MAX_PEARL_SPEED);
-                pearl.setVelocity(velocity);
+            // Steer pearl toward player's current look direction (fixes direction control in 1.9+)
+            if (player != null && player.isOnline() && pearl.getPassenger() != null) {
+                Vector lookDir = player.getLocation().getDirection();
+                Vector current = pearl.getVelocity();
+                double speed = current.length();
+                if (speed < 0.5) speed = 1.5;
+                if (speed > MAX_PEARL_SPEED) speed = MAX_PEARL_SPEED;
+                // Blend 60% current direction + 40% look direction for smooth steering
+                Vector steered = current.normalize().multiply(0.6).add(lookDir.multiply(0.4)).normalize();
+                pearl.setVelocity(steered.multiply(speed));
+            } else {
+                Vector velocity = pearl.getVelocity();
+                double speed = velocity.length();
+                if (speed > MAX_PEARL_SPEED) {
+                    pearl.setVelocity(velocity.normalize().multiply(MAX_PEARL_SPEED));
+                }
             }
 
             lastPearlLoc.put(uuid, currentLoc.clone());
