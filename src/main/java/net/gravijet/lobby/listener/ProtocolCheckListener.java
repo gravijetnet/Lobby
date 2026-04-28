@@ -1,6 +1,7 @@
 package net.gravijet.lobby.listener;
 
 import net.gravijet.lobby.Main;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -20,7 +21,9 @@ public class ProtocolCheckListener implements Listener {
         Player player = event.getPlayer();
         int protocol = getProtocolVersion(player);
         if (protocol != -1 && protocol != EXPECTED_PROTOCOL) {
-            plugin.getMessages().send(player, "protocol.not-47");
+            // Delay 8 ticks (0.4s) so the message appears after the join message
+            Bukkit.getScheduler().runTaskLater(plugin, () ->
+                plugin.getMessages().send(player, "protocol.not-47"), 8L);
         }
     }
 
