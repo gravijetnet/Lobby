@@ -296,6 +296,11 @@ public class LobbyListener implements Listener {
             return;
         }
 
+        // Don't cancel physical interactions (pressure plates, tripwires, etc.)
+        if (action == Action.PHYSICAL) {
+            return;
+        }
+
         event.setCancelled(true);
     }
 

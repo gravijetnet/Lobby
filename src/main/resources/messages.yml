@@ -58,7 +58,7 @@ lobby-block:
   cannot-place: ""
 
 protocol:
-  not-47: "&cWe highly recommend joining with 1.8.9 for the best experience."
+  not-47: "&cHey! For the best experience, we recommend joining with &41.8.9&c!&r"
 
 zone:
   restricted-teleported: "&cYou were in a restricted area! Teleported to spawn."
