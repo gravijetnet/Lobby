@@ -57,6 +57,9 @@ selector:
 lobby-block:
   cannot-place: ""
 
+protocol:
+  not-47: "&cWe highly recommend joining with 1.8.9 for the best experience."
+
 zone:
   restricted-teleported: "&cYou were in a restricted area! Teleported to spawn."
   restricted-leave: "&cYou are in a restricted area! Leave immediately."

@@ -2,6 +2,7 @@ package net.gravijet.lobby;
 
 import net.gravijet.lobby.command.*;
 import net.gravijet.lobby.listener.LobbyListener;
+import net.gravijet.lobby.listener.ProtocolCheckListener;
 import net.gravijet.lobby.listener.SpeedCookieListener;
 import net.gravijet.lobby.selector.ServerSelectorManager;
 import net.gravijet.lobby.zone.ZoneListener;
@@ -87,6 +88,7 @@ public class Main extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new LobbyListener(this, zoneManager, lobbyBlockManager), this);
         getServer().getPluginManager().registerEvents(new ZoneListener(this, zoneManager), this);
         getServer().getPluginManager().registerEvents(new SpeedCookieListener(this, cookieCommand), this);
+        getServer().getPluginManager().registerEvents(new ProtocolCheckListener(this), this);
 
         getCommand("build").setExecutor(new BuildCommand(this));
         getCommand("setspawn").setExecutor(new SetSpawnCommand(this));
