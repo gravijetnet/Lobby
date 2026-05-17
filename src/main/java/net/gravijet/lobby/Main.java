@@ -26,7 +26,12 @@ import org.bukkit.scoreboard.ScoreboardManager;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -34,6 +39,7 @@ public class Main extends JavaPlugin {
 
     private final Set<UUID> buildModePlayers = new HashSet<>();
     private final Set<UUID> flightDisabledByUser = new HashSet<>();
+    private final Map<UUID, List<String>> scoreboardCache = new HashMap<>();
     private FileConfiguration playersConfig;
     private File playersFile;
     private ScoreboardManager scoreboardManager;
@@ -151,6 +157,7 @@ public class Main extends JavaPlugin {
         setupInventory(player);
 
         updatePlayerVisibility(player);
+        refreshVisibilityForJoin(player);
         updateScoreboard(player);
 
         Location spawn = getSpawnLocation();
@@ -236,28 +243,47 @@ public class Main extends JavaPlugin {
     }
 
     public void updatePlayerVisibility(Player player) {
+        String vipPerm = getConfig().getString("visibility.vip-permission", "lobby.visibility.vip");
+        String staffPerm = getConfig().getString("visibility.staff-permission", "lobby.visibility.staff");
         String visibility = visibilityManager.getPlayerVisibility(player.getUniqueId());
+
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (online.equals(player)) continue;
+            applyVisibility(player, online, visibility, vipPerm, staffPerm);
+        }
+    }
+
+    /** Re-applies every online viewer's visibility preference toward {@code target}. */
+    public void refreshVisibilityForJoin(Player target) {
         String vipPerm = getConfig().getString("visibility.vip-permission", "lobby.visibility.vip");
         String staffPerm = getConfig().getString("visibility.staff-permission", "lobby.visibility.staff");
 
-        for (Player online : Bukkit.getOnlinePlayers()) {
-            switch (visibility) {
-                case "VIP":
-                    if (online.hasPermission(vipPerm)) player.showPlayer(online);
-                    else player.hidePlayer(online);
-                    break;
-                case "STAFF":
-                    if (online.hasPermission(staffPerm)) player.showPlayer(online);
-                    else player.hidePlayer(online);
-                    break;
-                case "NONE":
-                    player.hidePlayer(online);
-                    break;
-                default:
-                    player.showPlayer(online);
-                    break;
-            }
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (viewer.equals(target)) continue;
+            String visibility = visibilityManager.getPlayerVisibility(viewer.getUniqueId());
+            applyVisibility(viewer, target, visibility, vipPerm, staffPerm);
         }
+    }
+
+    private void applyVisibility(Player viewer, Player target, String visibility,
+                                 String vipPerm, String staffPerm) {
+        boolean show;
+        switch (visibility) {
+            case "VIP":
+                show = target.hasPermission(vipPerm);
+                break;
+            case "STAFF":
+                show = target.hasPermission(staffPerm);
+                break;
+            case "NONE":
+                show = false;
+                break;
+            default:
+                show = true;
+                break;
+        }
+        if (show) viewer.showPlayer(target);
+        else viewer.hidePlayer(target);
     }
 
     public void cycleVisibilityMode(Player player) {
@@ -295,18 +321,13 @@ public class Main extends JavaPlugin {
         Objective objective = board.getObjective(DisplaySlot.SIDEBAR);
 
         // If the player doesn't have our scoreboard, or the objective is not ours, create and assign it.
-        if (objective == null || !objective.getName().equals("lobby")) {
+        boolean freshBoard = objective == null || !objective.getName().equals("lobby");
+        if (freshBoard) {
             board = scoreboardManager.getNewScoreboard();
             objective = board.registerNewObjective("lobby", "dummy");
             objective.setDisplaySlot(DisplaySlot.SIDEBAR);
             player.setScoreboard(board);
-        }
-
-        objective.setDisplayName("§c§lexample.invalid");
-
-        // Clear all old scores to prevent duplicates and remove old lines.
-        for (String entry : board.getEntries()) {
-            board.resetScores(entry);
+            scoreboardCache.remove(player.getUniqueId());
         }
 
         int playtime = 0;
@@ -319,16 +340,40 @@ public class Main extends JavaPlugin {
             // Ignored if placeholder is not a number
         }
 
+        List<String> lines = Arrays.asList(
+                "§7§m-------------------",
+                "§8» §cRank: §6" + getPlaceholder(player, "%phoenix_player_real_rank%"),
+                "§8» §cPlayers: §6" + getPlaceholder(player, "%phoenix_server_global_online%"),
+                "§8» §cCoins: §6" + getPlaceholder(player, "%pxcosmetics_player_coins%"),
+                "§8» §cLevel: §6" + getPlaceholder(player, "%phoenix_player_level_displayname%"),
+                "§8» §cPlaytime: §6" + playtime + "h",
+                "§f ", // Blank line
+                "§7§oexample.invalid",
+                "§7§o§m-------------------"
+        );
+
+        // Skip the costly teardown/rebuild (and packet spam/flicker) when nothing changed.
+        if (lines.equals(scoreboardCache.get(player.getUniqueId()))) {
+            return;
+        }
+
+        objective.setDisplayName("§c§lexample.invalid");
+
+        // Clear all old scores to prevent duplicates and remove old lines.
+        for (String entry : board.getEntries()) {
+            board.resetScores(entry);
+        }
+
         int score = 15;
-        objective.getScore("§7§m-------------------").setScore(score--);
-        objective.getScore("§8» §cRank: §6" + getPlaceholder(player, "%phoenix_player_real_rank%")).setScore(score--);
-        objective.getScore("§8» §cPlayers: §6" + getPlaceholder(player, "%phoenix_server_global_online%")).setScore(score--);
-        objective.getScore("§8» §cCoins: §6" + getPlaceholder(player, "%pxcosmetics_player_coins%")).setScore(score--);
-        objective.getScore("§8» §cLevel: §6" + getPlaceholder(player, "%phoenix_player_level_displayname%")).setScore(score--);
-        objective.getScore("§8» §cPlaytime: §6" + playtime + "h").setScore(score--);
-        objective.getScore("§f ").setScore(score--); // Blank line
-        objective.getScore("§7§oexample.invalid").setScore(score--);
-        objective.getScore("§7§o§m-------------------").setScore(score--);
+        for (String line : lines) {
+            objective.getScore(line).setScore(score--);
+        }
+
+        scoreboardCache.put(player.getUniqueId(), new ArrayList<>(lines));
+    }
+
+    public void clearScoreboardCache(UUID uuid) {
+        scoreboardCache.remove(uuid);
     }
 
     public boolean isFlightDisabledByUser(Player player) {

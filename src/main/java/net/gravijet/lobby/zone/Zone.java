@@ -15,6 +15,11 @@ public final class Zone {
     private final int maxY;
     private final List<int[]> corners;
 
+    private final int bboxMinX;
+    private final int bboxMaxX;
+    private final int bboxMinZ;
+    private final int bboxMaxZ;
+
     private String requiredPermission;
     private String denyMessage;
     private boolean allowBlockPlacement;
@@ -31,6 +36,19 @@ public final class Zone {
         this.requiredPermission = "zone.entry." + this.name.toLowerCase();
         this.denyMessage = DEFAULT_DENY_MESSAGE;
         this.allowBlockPlacement = false;
+
+        int mnx = Integer.MAX_VALUE, mxx = Integer.MIN_VALUE;
+        int mnz = Integer.MAX_VALUE, mxz = Integer.MIN_VALUE;
+        for (int[] c : this.corners) {
+            if (c[0] < mnx) mnx = c[0];
+            if (c[0] > mxx) mxx = c[0];
+            if (c[1] < mnz) mnz = c[1];
+            if (c[1] > mxz) mxz = c[1];
+        }
+        this.bboxMinX = mnx;
+        this.bboxMaxX = mxx;
+        this.bboxMinZ = mnz;
+        this.bboxMaxZ = mxz;
     }
 
     public String getName() {
@@ -104,7 +122,10 @@ public final class Zone {
         int by = loc.getBlockY();
         if (by < minY || by > maxY) return false;
         if (corners.size() < 3) return false;
-        return isInsidePolygon(loc.getBlockX() + 0.5, loc.getBlockZ() + 0.5);
+        int bx = loc.getBlockX();
+        int bz = loc.getBlockZ();
+        if (bx < bboxMinX || bx > bboxMaxX || bz < bboxMinZ || bz > bboxMaxZ) return false;
+        return isInsidePolygon(bx + 0.5, bz + 0.5);
     }
 
     private boolean isInsidePolygon(double px, double pz) {

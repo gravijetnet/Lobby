@@ -191,6 +191,7 @@ public class LobbyListener implements Listener {
         ejectAndCancelPearl(player);
         plugin.savePlayerFlightPreference(player);
         player.setScoreboard(Bukkit.getScoreboardManager().getNewScoreboard());
+        plugin.clearScoreboardCache(player.getUniqueId());
         blockDenyCooldowns.remove(player.getUniqueId());
 
         // Remove player from build mode when leaving
@@ -467,21 +468,26 @@ public class LobbyListener implements Listener {
             ? Material.EMERALD_BLOCK
             : Material.REDSTONE_BLOCK;
 
-        // Phase 1 – after 5 s (100 t): placed block → color block
+        long firstChangeTicks = plugin.getConfig().getLong("lobby-blocks.first-change-ticks", 100L);
+        long removeTicks = plugin.getConfig().getLong("lobby-blocks.remove-ticks", 140L);
+        if (firstChangeTicks < 1L) firstChangeTicks = 100L;
+        if (removeTicks <= firstChangeTicks) removeTicks = firstChangeTicks + 40L;
+
+        // Phase 1 – placed block → color block
         int t1 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (loc.getBlock().getType() == itemType) {
                 loc.getBlock().setType(colorBlock);
             }
-        }, 100L).getTaskId();
+        }, firstChangeTicks).getTaskId();
 
-        // Phase 2 – after 2 more s (40 t): color block → air
+        // Phase 2 – color block → air
         int t2 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             lobbyBlockTasks.remove(loc);
             lobbyBlockManager.removeLobbyBlock(loc);
             if (loc.getBlock().getType() == colorBlock) {
                 loc.getBlock().setType(Material.AIR);
             }
-        }, 140L).getTaskId();
+        }, removeTicks).getTaskId();
 
         lobbyBlockTasks.put(loc, new int[]{t1, t2});
     }
