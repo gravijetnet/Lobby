@@ -2,7 +2,6 @@ package net.gravijet.lobby;
 
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.entity.Player;
 
 import java.io.File;
 import java.io.IOException;
@@ -60,11 +59,6 @@ public class VisibilityManager {
     public void setPlayerVisibility(UUID playerId, String visibility) {
         getVisibilityConfig().set("players." + playerId + ".visibility", visibility);
         saveVisibilityConfig();
-    }
-
-    public void savePlayerVisibility(Player player) {
-        String visibility = plugin.getConfig().getString("players." + player.getUniqueId() + ".visibility", "ALL");
-        setPlayerVisibility(player.getUniqueId(), visibility);
     }
 
     public void migrateFromMainConfig() {
