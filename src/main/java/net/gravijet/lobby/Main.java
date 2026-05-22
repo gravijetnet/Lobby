@@ -58,9 +58,13 @@ public class Main extends JavaPlugin {
         playersConfig = YamlConfiguration.loadConfiguration(playersFile);
     }
 
-    private void savePlayersConfig() {
+    public void savePlayersConfig() {
         if (playersConfig == null || playersFile == null) return;
         try { playersConfig.save(playersFile); } catch (IOException e) { getLogger().warning("Could not save players.yml"); }
+    }
+
+    public FileConfiguration getPlayersConfig() {
+        return playersConfig;
     }
 
     public void savePlayerFlightPreference(Player player) {
@@ -87,6 +91,7 @@ public class Main extends JavaPlugin {
         zoneManager.startParticleTask();
 
         lobbyBlockManager = new LobbyBlockManager(this);
+        lobbyBlockManager.startCleanupTask();
 
         getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
 
@@ -127,9 +132,12 @@ public class Main extends JavaPlugin {
         getServer().getMessenger().unregisterOutgoingPluginChannel(this);
         for (Player player : Bukkit.getOnlinePlayers()) {
             boolean prefersFlight = !isFlightDisabledByUser(player);
-            playersConfig.set(player.getUniqueId() + ".prefers-flight", prefersFlight);
+            if (playersConfig != null) {
+                playersConfig.set(player.getUniqueId() + ".prefers-flight", prefersFlight);
+            }
         }
         savePlayersConfig();
+        saveConfig();
 
         // Remove all lobby blocks on disable
         if (lobbyBlockManager != null) {
@@ -165,7 +173,9 @@ public class Main extends JavaPlugin {
             player.teleport(spawn);
         }
 
-        boolean prefersFlight = playersConfig.getBoolean(player.getUniqueId() + ".prefers-flight", player.hasPermission("lobby.fly"));
+        boolean prefersFlight = (playersConfig != null)
+                ? playersConfig.getBoolean(player.getUniqueId() + ".prefers-flight", player.hasPermission("lobby.fly"))
+                : player.hasPermission("lobby.fly");
         setFlightPreference(player, prefersFlight);
         restoreFlightState(player);
     }
@@ -173,39 +183,52 @@ public class Main extends JavaPlugin {
     public void setupInventory(Player player) {
         ItemStack serverSelector = new ItemStack(Material.COMPASS);
         ItemMeta selectorMeta = serverSelector.getItemMeta();
-        selectorMeta.setDisplayName("§cServer Selector");
-        serverSelector.setItemMeta(selectorMeta);
+        if (selectorMeta != null) {
+            selectorMeta.setDisplayName("§cServer Selector");
+            serverSelector.setItemMeta(selectorMeta);
+        }
         player.getInventory().setItem(0, serverSelector);
 
         ItemStack enderButt = new ItemStack(Material.ENDER_PEARL);
         ItemMeta enderMeta = enderButt.getItemMeta();
-        enderMeta.setDisplayName("§cEnder Butt");
-        enderButt.setItemMeta(enderMeta);
+        if (enderMeta != null) {
+            enderMeta.setDisplayName("§cEnder Butt");
+            enderButt.setItemMeta(enderMeta);
+        }
         player.getInventory().setItem(1, enderButt);
 
         ItemStack coinshop = new ItemStack(Material.GOLD_INGOT);
         ItemMeta coinshopMeta = coinshop.getItemMeta();
-        coinshopMeta.setDisplayName("§cCoinshop");
-        coinshop.setItemMeta(coinshopMeta);
+        if (coinshopMeta != null) {
+            coinshopMeta.setDisplayName("§cCoinshop");
+            coinshop.setItemMeta(coinshopMeta);
+        }
         player.getInventory().setItem(2, coinshop);
 
         ItemStack lobbyBlocks = new ItemStack(Material.SANDSTONE, 64);
         ItemMeta lobbyMeta = lobbyBlocks.getItemMeta();
-        lobbyMeta.setDisplayName("§cBlocks");
-        lobbyBlocks.setItemMeta(lobbyMeta);
+        if (lobbyMeta != null) {
+            lobbyMeta.setDisplayName("§cBlocks");
+            lobbyBlocks.setItemMeta(lobbyMeta);
+        }
         player.getInventory().setItem(4, lobbyBlocks);
 
         ItemStack settings = new ItemStack(Material.REDSTONE_TORCH_ON);
         ItemMeta settingsMeta = settings.getItemMeta();
-        settingsMeta.setDisplayName("§cSettings");
-        settings.setItemMeta(settingsMeta);
+        if (settingsMeta != null) {
+            settingsMeta.setDisplayName("§cSettings");
+            settings.setItemMeta(settingsMeta);
+        }
         player.getInventory().setItem(6, settings);
 
         ItemStack friends = new ItemStack(Material.SKULL_ITEM, 1, (short) 3);
-        SkullMeta friendsMeta = (SkullMeta) friends.getItemMeta();
-        friendsMeta.setDisplayName("§cFriends");
-        friendsMeta.setOwner(player.getName());
-        friends.setItemMeta(friendsMeta);
+        ItemMeta friendsRawMeta = friends.getItemMeta();
+        if (friendsRawMeta instanceof SkullMeta) {
+            SkullMeta friendsMeta = (SkullMeta) friendsRawMeta;
+            friendsMeta.setDisplayName("§cFriends");
+            friendsMeta.setOwner(player.getName());
+            friends.setItemMeta(friendsMeta);
+        }
         player.getInventory().setItem(7, friends);
 
         updateVisibilityItem(player);
@@ -237,8 +260,10 @@ public class Main extends JavaPlugin {
 
         ItemStack item = new ItemStack(Material.INK_SACK, 1, dyeDamage);
         ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(displayName);
-        item.setItemMeta(meta);
+        if (meta != null) {
+            meta.setDisplayName(displayName);
+            item.setItemMeta(meta);
+        }
         player.getInventory().setItem(8, item);
     }
 
@@ -317,6 +342,7 @@ public class Main extends JavaPlugin {
     }
 
     public void updateScoreboard(Player player) {
+        if (scoreboardManager == null) return;
         Scoreboard board = player.getScoreboard();
         Objective objective = board.getObjective(DisplaySlot.SIDEBAR);
 
@@ -330,26 +356,28 @@ public class Main extends JavaPlugin {
             scoreboardCache.remove(player.getUniqueId());
         }
 
-        int playtime = 0;
+        long playtime = 0;
         try {
             String playtimeValue = getPlaceholder(player, "%phoenix_player_playtime_seconds%");
             if (playtimeValue != null && !playtimeValue.startsWith("%")) {
-                playtime = Integer.parseInt(playtimeValue) / 3600;
+                playtime = Long.parseLong(playtimeValue) / 3600;
             }
         } catch (NumberFormatException ignored) {
             // Ignored if placeholder is not a number
         }
 
+        // Each line is prefixed with a unique invisible padding (§r§0, §r§1, …) so
+        // duplicate placeholder values never collide as scoreboard score keys.
         List<String> lines = Arrays.asList(
-                "§7§m-------------------",
-                "§8» §cRank: §6" + getPlaceholder(player, "%phoenix_player_real_rank%"),
-                "§8» §cPlayers: §6" + getPlaceholder(player, "%phoenix_server_global_online%"),
-                "§8» §cCoins: §6" + getPlaceholder(player, "%pxcosmetics_player_coins%"),
-                "§8» §cLevel: §6" + getPlaceholder(player, "%phoenix_player_level_displayname%"),
-                "§8» §cPlaytime: §6" + playtime + "h",
-                "§f ", // Blank line
-                "§7§oexample.invalid",
-                "§7§o§m-------------------"
+                "§r§0§7§m-------------------",
+                "§r§1§8» §cRank: §6" + getPlaceholder(player, "%phoenix_player_real_rank%"),
+                "§r§2§8» §cPlayers: §6" + getPlaceholder(player, "%phoenix_server_global_online%"),
+                "§r§3§8» §cCoins: §6" + getPlaceholder(player, "%pxcosmetics_player_coins%"),
+                "§r§4§8» §cLevel: §6" + getPlaceholder(player, "%phoenix_player_level_displayname%"),
+                "§r§5§8» §cPlaytime: §6" + playtime + "h",
+                "§r§6 ",
+                "§r§7§7§oexample.invalid",
+                "§r§8§7§o§m-------------------"
         );
 
         // Skip the costly teardown/rebuild (and packet spam/flicker) when nothing changed.
@@ -364,7 +392,7 @@ public class Main extends JavaPlugin {
             board.resetScores(entry);
         }
 
-        int score = 15;
+        int score = lines.size();
         for (String line : lines) {
             objective.getScore(line).setScore(score--);
         }
@@ -442,6 +470,7 @@ public class Main extends JavaPlugin {
     }
 
     public void setSpawnLocation(Location loc) {
+        if (loc.getWorld() == null) return;
         getConfig().set("spawn.world", loc.getWorld().getName());
         getConfig().set("spawn.x", loc.getX());
         getConfig().set("spawn.y", loc.getY());
@@ -502,6 +531,11 @@ public class Main extends JavaPlugin {
         }
 
         hasPlaceholderAPI = Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null;
+
+        // Remove cache entries for players who are no longer online
+        Set<UUID> onlineUUIDs = new HashSet<>();
+        for (Player p : Bukkit.getOnlinePlayers()) onlineUUIDs.add(p.getUniqueId());
+        scoreboardCache.keySet().retainAll(onlineUUIDs);
 
         for (Player player : Bukkit.getOnlinePlayers()) {
             updatePlayerVisibility(player);

@@ -24,6 +24,8 @@ public class ServerSelectorManager {
 
     public ServerSelectorManager(Main plugin) {
         this.plugin = plugin;
+        // Eagerly initialize so config is never null when openServerSelector/handleMenuClick are called.
+        this.config = plugin.getConfig();
     }
 
     public void loadConfig() {
@@ -42,6 +44,11 @@ public class ServerSelectorManager {
         String title = ChatColor.translateAlternateColorCodes('&',
                 menuConfig.getString("title", "Server Selector"));
         int size = menuConfig.getInt("size", 54);
+        // Inventory size must be a positive multiple of 9 and at most 54
+        if (size <= 0 || size % 9 != 0 || size > 54) {
+            plugin.getLogger().warning("Invalid server-selector size " + size + " — defaulting to 54.");
+            size = 54;
+        }
 
         Inventory gui = Bukkit.createInventory(null, size, title);
 
@@ -124,14 +131,24 @@ public class ServerSelectorManager {
     }
 
     private void executeActions(Player player, List<String> actions) {
+        // Sanitize the player name so it cannot inject extra commands when substituted.
+        String safeName = player.getName().replaceAll("[^a-zA-Z0-9_]", "");
         for (String action : actions) {
             if (action.startsWith("connect:")) {
-                connectToServer(player, action.substring(8));
+                // Strip non-printable/control characters from the server name.
+                String server = action.substring(8).replaceAll("[\\x00-\\x1F\\x7F]", "");
+                connectToServer(player, server);
             } else if (action.startsWith("command:")) {
-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(),
-                        action.substring(8).replace("%player%", player.getName()));
+                // Strip newlines and semicolons that could chain additional commands.
+                String cmd = action.substring(8)
+                        .replace("%player%", safeName)
+                        .replaceAll("[;\n\r]", "");
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd);
             } else if (action.startsWith("playercommand:")) {
-                player.performCommand(action.substring(14).replace("%player%", player.getName()));
+                String cmd = action.substring(14)
+                        .replace("%player%", safeName)
+                        .replaceAll("[;\n\r]", "");
+                player.performCommand(cmd);
             }
         }
     }

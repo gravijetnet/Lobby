@@ -40,7 +40,8 @@ public class LobbyListener implements Listener {
 
     private final Map<UUID, EnderPearl> enderButtPearls = new HashMap<>();
     private final Map<UUID, Location> lastPearlLoc = new HashMap<>();
-    private final Map<Location, int[]> lobbyBlockTasks = new HashMap<>();
+    // Keyed by "world:x:y:z" to avoid Location hashCode/equals issues with yaw/pitch
+    private final Map<String, int[]> lobbyBlockTasks = new HashMap<>();
     private final Map<UUID, Long> blockDenyCooldowns = new HashMap<>();
     private static final double MAX_PEARL_SPEED = 3.0;
     private static final long BLOCK_DENY_COOLDOWN_MS = 2000L;
@@ -57,6 +58,8 @@ public class LobbyListener implements Listener {
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getLocation().getY() <= 200) continue;
             if (plugin.isInBuildMode(player)) continue;
+            // Eject and remove the pearl first so the player is no longer a vehicle
+            // passenger before the teleport, preventing pearl/player desync.
             ejectAndCancelPearl(player);
             Location spawn = plugin.getSpawnLocation();
             if (spawn != null) {
@@ -85,7 +88,7 @@ public class LobbyListener implements Listener {
             Location previousLoc = lastPearlLoc.get(uuid);
 
             // Check for collision if we have previous location
-            if (previousLoc != null && !previousLoc.getWorld().equals(currentLoc.getWorld())) {
+            if (previousLoc != null && (previousLoc.getWorld() == null || !previousLoc.getWorld().equals(currentLoc.getWorld()))) {
                 previousLoc = null;
             }
 
@@ -127,8 +130,8 @@ public class LobbyListener implements Listener {
                 }
             }
 
-            // Check player collision if riding the pearl
-            Player player = Bukkit.getPlayer(uuid);
+            // Check player collision if riding the pearl (reuse riderCheck fetched above)
+            Player player = riderCheck;
             if (player != null && player.isOnline() && pearl.getPassenger() != null) {
                 Location playerLoc = player.getLocation();
                 if (isPlayerInsideSolidBlock(playerLoc)) {
@@ -156,8 +159,11 @@ public class LobbyListener implements Listener {
                 if (speed < 0.5) speed = 1.5;
                 if (speed > MAX_PEARL_SPEED) speed = MAX_PEARL_SPEED;
                 // Blend 60% current direction + 40% look direction for smooth steering
-                Vector steered = current.normalize().multiply(0.6).add(lookDir.multiply(0.4)).normalize();
-                pearl.setVelocity(steered.multiply(speed));
+                Vector blended = current.normalize().multiply(0.6).add(lookDir.multiply(0.4));
+                double blendedLen = blended.length();
+                Vector steered = blendedLen > 1e-6 ? blended.multiply(1.0 / blendedLen) : lookDir.clone().normalize();
+                double finalSpeed = Math.min(speed, MAX_PEARL_SPEED);
+                pearl.setVelocity(steered.multiply(finalSpeed));
             } else {
                 Vector velocity = pearl.getVelocity();
                 double speed = velocity.length();
@@ -190,7 +196,7 @@ public class LobbyListener implements Listener {
         Player player = event.getPlayer();
         ejectAndCancelPearl(player);
         plugin.savePlayerFlightPreference(player);
-        player.setScoreboard(Bukkit.getScoreboardManager().getNewScoreboard());
+        player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
         plugin.clearScoreboardCache(player.getUniqueId());
         blockDenyCooldowns.remove(player.getUniqueId());
 
@@ -245,16 +251,22 @@ public class LobbyListener implements Listener {
         // Keep slot 4 filled with 64 sandstone lobby blocks (only for named lobby block items)
         Bukkit.getScheduler().runTask(plugin, () -> {
             ItemStack slot4 = player.getInventory().getItem(4);
-            boolean isNamedLobbyBlock = slot4 != null && slot4.hasItemMeta()
-                && "§cBlocks".equals(slot4.getItemMeta().getDisplayName())
-                && (slot4.getType() == Material.SANDSTONE || slot4.getType() == Material.DIAMOND_BLOCK);
+            boolean isNamedLobbyBlock = false;
+            if (slot4 != null && slot4.hasItemMeta()) {
+                ItemMeta slot4Meta = slot4.getItemMeta();
+                isNamedLobbyBlock = slot4Meta != null
+                    && "§cBlocks".equals(slot4Meta.getDisplayName())
+                    && (slot4.getType() == Material.SANDSTONE || slot4.getType() == Material.DIAMOND_BLOCK);
+            }
             if (isNamedLobbyBlock) {
                 slot4.setAmount(64);
             } else {
                 ItemStack fresh = new ItemStack(Material.SANDSTONE, 64);
                 ItemMeta meta = fresh.getItemMeta();
-                meta.setDisplayName("§cBlocks");
-                fresh.setItemMeta(meta);
+                if (meta != null) {
+                    meta.setDisplayName("§cBlocks");
+                    fresh.setItemMeta(meta);
+                }
                 player.getInventory().setItem(4, fresh);
             }
             player.updateInventory();
@@ -363,16 +375,11 @@ public class LobbyListener implements Listener {
 
     @EventHandler
     public void onDrop(PlayerDropItemEvent event) {
-        if (event.getItemDrop().getItemStack().getType() == Material.DIAMOND_BLOCK) {
-            event.setCancelled(true);
-            return;
-        }
         if (!plugin.isInBuildMode(event.getPlayer())) event.setCancelled(true);
     }
 
     @EventHandler
     public void onPickup(PlayerPickupItemEvent event) {
-        if (event.getItem().getItemStack().getType() == Material.DIAMOND_BLOCK) return;
         if (!plugin.isInBuildMode(event.getPlayer())) event.setCancelled(true);
     }
 
@@ -450,14 +457,24 @@ public class LobbyListener implements Listener {
             Bukkit.getScheduler().runTask(plugin, () -> player.performCommand("settings"));
         } else if (item.getType() == Material.SKULL_ITEM && nameEquals(item, "§cFriends")) {
             Bukkit.getScheduler().runTask(plugin, () -> player.performCommand("friends menu"));
-        } else if (item.getType() == Material.INK_SACK && item.hasItemMeta() && item.getItemMeta().getDisplayName().contains("visible")) {
-            plugin.cycleVisibilityMode(player);
+        } else if (item.getType() == Material.INK_SACK && item.hasItemMeta()) {
+            ItemMeta inkMeta = item.getItemMeta();
+            if (inkMeta != null && inkMeta.getDisplayName().contains("visible")) {
+                plugin.cycleVisibilityMode(player);
+            }
         }
     }
 
+    private static String blockKey(Location loc) {
+        if (loc.getWorld() == null) return "null:" + loc.getBlockX() + ":" + loc.getBlockY() + ":" + loc.getBlockZ();
+        String worldName = loc.getWorld().getName().replace(":", "_");
+        return worldName + ":" + loc.getBlockX() + ":" + loc.getBlockY() + ":" + loc.getBlockZ();
+    }
+
     private void scheduleLobbyBlock(Location loc, Material itemType) {
+        String key = blockKey(loc);
         // Cancel any running animation at this location
-        int[] existing = lobbyBlockTasks.remove(loc);
+        int[] existing = lobbyBlockTasks.remove(key);
         if (existing != null) {
             for (int id : existing) Bukkit.getScheduler().cancelTask(id);
         }
@@ -478,18 +495,23 @@ public class LobbyListener implements Listener {
             if (loc.getBlock().getType() == itemType) {
                 loc.getBlock().setType(colorBlock);
             }
+            // If the block type changed unexpectedly (placed over by another player),
+            // the block is no longer a recognizable lobby block — evict it from tracking
+            // so phase 2 still cleans up the key even if it doesn't set AIR.
         }, firstChangeTicks).getTaskId();
 
-        // Phase 2 – color block → air
+        // Phase 2 – color block → air (always remove from tracking regardless of current type)
         int t2 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            lobbyBlockTasks.remove(loc);
+            lobbyBlockTasks.remove(key);
             lobbyBlockManager.removeLobbyBlock(loc);
             if (loc.getBlock().getType() == colorBlock) {
                 loc.getBlock().setType(Material.AIR);
             }
+            // If the block was already replaced by something else, just stop tracking it —
+            // the foreign block is left intact.
         }, removeTicks).getTaskId();
 
-        lobbyBlockTasks.put(loc, new int[]{t1, t2});
+        lobbyBlockTasks.put(key, new int[]{t1, t2});
     }
 
     private void ejectAndCancelPearl(Player player) {
@@ -537,23 +559,6 @@ public class LobbyListener implements Listener {
 
         while (iterator.hasNext()) {
             Block block = iterator.next();
-            Material type = block.getType();
-
-                        // Check if block is solid
-            if (isSolid(type)) {
-                return true; // Solid block found
-            }
-        }
-
-        // Additional check: sample points along the line at higher resolution
-        int steps = (int) (distance * 4); // 4 samples per block
-        if (steps > 20) steps = 20; // Cap to prevent performance issues
-        if (steps < 2) steps = 2;
-
-        for (int i = 1; i < steps; i++) {
-            double t = (double) i / steps;
-            Location sampled = from.clone().add(direction.clone().multiply(distance * t));
-            Block block = sampled.getBlock();
             if (isSolid(block.getType())) {
                 return true;
             }
@@ -603,15 +608,10 @@ public class LobbyListener implements Listener {
             case ENDER_PORTAL_FRAME:
             case PORTAL:
             case AIR:
-            case IRON_FENCE:
                 return true;
             default:
-                // Check if it's a slab, stair, or other half-block
+                // Check for glass panes and thin glass (players can move through)
                 String name = material.name();
-                if (name.contains("SLAB") || name.contains("STEP") || name.contains("STAIRS")) {
-                    return true;
-                }
-                // Check for glass panes and thin glass
                 if (name.contains("GLASS_PANE") || name.contains("THIN_GLASS")) {
                     return true;
                 }

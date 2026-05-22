@@ -26,11 +26,20 @@ public class ZoneConfigManager {
         if (zonesFile == null) {
             zonesFile = new File(plugin.getDataFolder(), "zones.yml");
         }
-        
+
         if (!zonesFile.exists()) {
-            plugin.saveResource("zones.yml", false);
+            if (plugin.getResource("zones.yml") != null) {
+                plugin.saveResource("zones.yml", false);
+            } else {
+                try {
+                    zonesFile.getParentFile().mkdirs();
+                    zonesFile.createNewFile();
+                } catch (IOException e) {
+                    plugin.getLogger().log(Level.SEVERE, "Could not create zones.yml", e);
+                }
+            }
         }
-        
+
         zonesConfig = YamlConfiguration.loadConfiguration(zonesFile);
     }
 
@@ -82,20 +91,31 @@ public class ZoneConfigManager {
     }
 
     public void saveZonesToConfig() {
-        // Clear existing zones in config
-        getZonesConfig().set("zones", null);
-        
         ZoneManager zoneManager = plugin.getZoneManager();
-        if (zoneManager != null) {
+        if (zoneManager == null) return;
+
+        // Build a fresh in-memory config so partial writes don't leave a corrupt file.
+        FileConfiguration fresh = new YamlConfiguration();
+        FileConfiguration previous = zonesConfig;
+        // Assign fresh first so serializeZone calls getZonesConfig() on the new instance.
+        zonesConfig = fresh;
+        try {
             for (Zone zone : zoneManager.getAllZones()) {
                 serializeZone(zone);
             }
-            saveZonesConfig();
+            fresh.save(zonesFile);
+        } catch (IOException e) {
+            plugin.getLogger().log(Level.SEVERE, "Could not save zones.yml", e);
+            zonesConfig = previous; // restore on failure so in-memory state stays valid
+        } catch (RuntimeException e) {
+            plugin.getLogger().log(Level.SEVERE, "Unexpected error serializing zones", e);
+            zonesConfig = previous;
         }
     }
 
     private void serializeZone(Zone zone) {
-        String path = "zones." + zone.getName();
+        // Use lowercase key so in-memory and on-disk names are consistent
+        String path = "zones." + zone.getName().toLowerCase();
         getZonesConfig().set(path + ".world", zone.getWorldName());
         getZonesConfig().set(path + ".minY", zone.getMinY());
         getZonesConfig().set(path + ".maxY", zone.getMaxY());
@@ -105,7 +125,12 @@ public class ZoneConfigManager {
         getZonesConfig().set(path + ".corners", cs);
 
         getZonesConfig().set(path + ".required-permission", zone.getRequiredPermission());
-        getZonesConfig().set(path + ".deny-message", zone.getDenyMessage().replace("\n", "\\n"));
+        // Convert translated § codes back to & codes so the YAML file stays human-editable
+        // and so that loading via translateAlternateColorCodes on the next reload is correct.
+        String rawMessage = zone.getDenyMessage()
+                .replace("\n", "\\n")
+                .replace('§', '&');
+        getZonesConfig().set(path + ".deny-message", rawMessage);
         getZonesConfig().set(path + ".allow-block-placement", zone.isAllowBlockPlacement());
         getZonesConfig().set(path + ".allow-flight", zone.isAllowFlight());
     }

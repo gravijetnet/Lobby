@@ -22,11 +22,21 @@ public class VisibilityManager {
         if (visibilityFile == null) {
             visibilityFile = new File(plugin.getDataFolder(), "visibility.yml");
         }
-        
+
         if (!visibilityFile.exists()) {
-            plugin.saveResource("visibility.yml", false);
+            // saveResource throws if the file is not bundled in the JAR; create a blank file instead
+            if (plugin.getResource("visibility.yml") != null) {
+                plugin.saveResource("visibility.yml", false);
+            } else {
+                try {
+                    visibilityFile.getParentFile().mkdirs();
+                    visibilityFile.createNewFile();
+                } catch (IOException e) {
+                    plugin.getLogger().warning("Could not create visibility.yml: " + e.getMessage());
+                }
+            }
         }
-        
+
         visibilityConfig = YamlConfiguration.loadConfiguration(visibilityFile);
     }
 
@@ -62,33 +72,39 @@ public class VisibilityManager {
     }
 
     public void migrateFromMainConfig() {
-        // Check if main config has visibility data and migrate it
         FileConfiguration mainConfig = plugin.getConfig();
-        if (mainConfig.contains("players")) {
-            for (String key : mainConfig.getConfigurationSection("players").getKeys(false)) {
-                String visibility = mainConfig.getString("players." + key + ".visibility");
-                if (visibility != null) {
-                    try {
-                        UUID playerId = UUID.fromString(key);
-                        setPlayerVisibility(playerId, visibility);
-                        // Remove from main config
-                        mainConfig.set("players." + key + ".visibility", null);
-                    } catch (IllegalArgumentException e) {
-                        // Invalid UUID format, skip
-                    }
+        org.bukkit.configuration.ConfigurationSection playersSection =
+                mainConfig.getConfigurationSection("players");
+        if (playersSection == null) return;
+
+        for (String key : playersSection.getKeys(false)) {
+            String visibility = mainConfig.getString("players." + key + ".visibility");
+            if (visibility != null) {
+                try {
+                    UUID playerId = UUID.fromString(key);
+                    setPlayerVisibility(playerId, visibility);
+                    mainConfig.set("players." + key + ".visibility", null);
+                } catch (IllegalArgumentException e) {
+                    // Invalid UUID format, skip
                 }
             }
-            // Clean up empty player sections
-            for (String key : mainConfig.getConfigurationSection("players").getKeys(false)) {
-                if (mainConfig.getConfigurationSection("players." + key).getKeys(false).isEmpty()) {
+        }
+
+        // Re-fetch after possible mutations
+        playersSection = mainConfig.getConfigurationSection("players");
+        if (playersSection != null) {
+            for (String key : playersSection.getKeys(false)) {
+                org.bukkit.configuration.ConfigurationSection sub =
+                        mainConfig.getConfigurationSection("players." + key);
+                if (sub != null && sub.getKeys(false).isEmpty()) {
                     mainConfig.set("players." + key, null);
                 }
             }
-            if (mainConfig.getConfigurationSection("players") != null && 
-                mainConfig.getConfigurationSection("players").getKeys(false).isEmpty()) {
+            playersSection = mainConfig.getConfigurationSection("players");
+            if (playersSection != null && playersSection.getKeys(false).isEmpty()) {
                 mainConfig.set("players", null);
             }
-            plugin.saveConfig();
         }
+        plugin.saveConfig();
     }
 }

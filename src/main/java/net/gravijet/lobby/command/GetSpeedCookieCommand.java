@@ -42,8 +42,10 @@ public class GetSpeedCookieCommand implements CommandExecutor {
         Inventory inv  = Bukkit.createInventory(null, 27, "§bSpeed Cookie");
         ItemStack pane = new ItemStack(Material.STAINED_GLASS_PANE, 1, (short) 7);
         ItemMeta  paneMeta = pane.getItemMeta();
-        paneMeta.setDisplayName("§8 ");
-        pane.setItemMeta(paneMeta);
+        if (paneMeta != null) {
+            paneMeta.setDisplayName("§8 ");
+            pane.setItemMeta(paneMeta);
+        }
         for (int i = 0; i < 27; i++) {
             if (i != 13) inv.setItem(i, pane);
         }
@@ -58,49 +60,76 @@ public class GetSpeedCookieCommand implements CommandExecutor {
             plugin.getMessages().send(player, "speedcookie.cooldown", "time", formatTime(remaining));
             return;
         }
-        cooldowns.put(uuid, System.currentTimeMillis());
-        player.getInventory().addItem(buildGiveCookieItem());
+
+        // Give the item FIRST so that a crash between this line and the cooldown save
+        // does not permanently burn the cooldown without the player receiving the cookie.
+        Map<Integer, ItemStack> leftover = player.getInventory().addItem(buildGiveCookieItem());
         player.closeInventory();
+        if (!leftover.isEmpty()) {
+            plugin.getMessages().send(player, "speedcookie.inventory-full");
+            return;
+        }
+
+        // Item successfully placed — now record the cooldown.
+        long now = System.currentTimeMillis();
+        cooldowns.put(uuid, now);
+        plugin.getPlayersConfig().set(uuid + ".cookie-cooldown", now);
+        // Save asynchronously to avoid freezing the main thread on every click.
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, plugin::savePlayersConfig);
+
         plugin.getMessages().send(player, "speedcookie.received-menu");
     }
 
     public ItemStack buildMenuCookieItem(UUID uuid) {
         ItemStack cookie = new ItemStack(Material.COOKIE);
         ItemMeta  meta   = cookie.getItemMeta();
-        meta.setDisplayName("§bSpeed Cookie");
-        List<String> lore = new ArrayList<>();
-        lore.add("§7Grants §bSpeed II §7for §b10 minutes§7!");
-        long remaining = getRemainingCooldown(uuid);
-        if (remaining > 0) {
-            lore.add("§cAvailable in: §e" + formatTime(remaining));
-        } else {
-            lore.add("§aClick to receive!");
+        if (meta != null) {
+            meta.setDisplayName("§bSpeed Cookie");
+            List<String> lore = new ArrayList<>();
+            lore.add("§7Grants §bSpeed II §7for §b10 minutes§7!");
+            long remaining = getRemainingCooldown(uuid);
+            if (remaining > 0) {
+                lore.add("§cAvailable in: §e" + formatTime(remaining));
+            } else {
+                lore.add("§aClick to receive!");
+            }
+            meta.setLore(lore);
+            cookie.setItemMeta(meta);
         }
-        meta.setLore(lore);
-        cookie.setItemMeta(meta);
         return cookie;
     }
 
     public static ItemStack buildGiveCookieItem() {
         ItemStack cookie = new ItemStack(Material.COOKIE);
         ItemMeta  meta   = cookie.getItemMeta();
-        meta.setDisplayName("§bSpeed Cookie");
-        List<String> lore = new ArrayList<>();
-        lore.add("§7Grants §bSpeed II §7for §b10 minutes§7!");
-        lore.add("§7Right-click to eat!");
-        meta.setLore(lore);
-        cookie.setItemMeta(meta);
+        if (meta != null) {
+            meta.setDisplayName("§bSpeed Cookie");
+            List<String> lore = new ArrayList<>();
+            lore.add("§7Grants §bSpeed II §7for §b10 minutes§7!");
+            lore.add("§7Right-click to eat!");
+            meta.setLore(lore);
+            cookie.setItemMeta(meta);
+        }
         return cookie;
     }
 
     public boolean hasCooldown(UUID uuid) {
-        Long last = cooldowns.get(uuid);
-        return last != null && System.currentTimeMillis() - last < COOLDOWN_MS;
+        return getRemainingCooldown(uuid) > 0;
     }
 
     public long getRemainingCooldown(UUID uuid) {
         Long last = cooldowns.get(uuid);
-        if (last == null) return 0;
+        if (last == null) {
+            // Fall back to persisted value (survives restarts/reloads)
+            long persisted = plugin.getPlayersConfig().getLong(uuid + ".cookie-cooldown", 0L);
+            if (persisted == 0L) return 0;
+            long remaining = (persisted + COOLDOWN_MS) - System.currentTimeMillis();
+            if (remaining > 0) {
+                cooldowns.put(uuid, persisted); // cache it
+                return remaining;
+            }
+            return 0;
+        }
         return Math.max(0, (last + COOLDOWN_MS) - System.currentTimeMillis());
     }
 

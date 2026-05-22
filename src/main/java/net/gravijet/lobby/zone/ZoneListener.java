@@ -48,7 +48,7 @@ public final class ZoneListener implements Listener {
                 int fires = stuckTicks.merge(player.getUniqueId(), 1, Integer::sum);
 
                 if (fires >= 3) {
-                    stuckTicks.put(player.getUniqueId(), 0);
+                    stuckTicks.remove(player.getUniqueId());
                     ejectToSpawn(player, denied);
                     continue;
                 }
@@ -73,18 +73,19 @@ public final class ZoneListener implements Listener {
             return;
         }
         // Spawn not available — scan outward from boundary
-        Location safe = findSafeOutsideLocation(player.getLocation(), denied);
+        Location safe = findSafeOutsideLocation(player, player.getLocation(), denied);
         if (safe != null) {
             player.teleport(safe);
         }
     }
 
-    /** Walks outward from the nearest boundary in steps until clear of all denied zones. */
-    private Location findSafeOutsideLocation(Location from, Zone zone) {
+    /** Walks outward from the nearest boundary in steps until clear of all denied zones for this player. */
+    private Location findSafeOutsideLocation(Player player, Location from, Zone zone) {
         Location boundary = ZoneManager.findNearestBoundaryPoint(from, zone);
         if (boundary == null) return null;
 
         List<int[]> corners = zone.getCorners();
+        if (corners.isEmpty()) return null;
         double cx = 0, cz = 0;
         for (int[] c : corners) { cx += c[0] + 0.5; cz += c[1] + 0.5; }
         cx /= corners.size(); cz /= corners.size();
@@ -103,7 +104,8 @@ public final class ZoneListener implements Listener {
                 boundary.getZ() + uz * dist,
                 from.getYaw(), from.getPitch()
             );
-            if (zoneManager.getZoneAt(candidate) == null) {
+            // Use getDeniedZoneAt so we only skip locations the player can't enter.
+            if (zoneManager.getDeniedZoneAt(player, candidate) == null) {
                 return candidate;
             }
         }
@@ -150,6 +152,8 @@ public final class ZoneListener implements Listener {
             Location cornerLoc = event.getClickedBlock().getLocation();
             ZoneSelectionSession session = zoneManager.getOrCreateSession(player.getUniqueId());
 
+            if (cornerLoc.getWorld() == null) return;
+
             if (!session.isEmpty() && session.getWorldName() != null
                     && !session.getWorldName().equals(cornerLoc.getWorld().getName())) {
                 plugin.getMessages().send(player, "zone.wand.wrong-world");
@@ -193,8 +197,12 @@ public final class ZoneListener implements Listener {
         event.setCancelled(true);
         sendDenyMessage(player, denied);
 
+        // A player is "already inside" if their 'from' location is also in a denied zone
+        // (any denied zone, not necessarily the same one — covers overlapping zones).
         Zone deniedFrom = zoneManager.getDeniedZoneAt(player, from);
-        boolean alreadyInside = deniedFrom != null && deniedFrom.getName().equals(denied.getName());
+        boolean alreadyInside = deniedFrom != null;
+
+        final UUID uuid = player.getUniqueId();
 
         if (alreadyInside) {
             // Player is already inside — apply knockback to push them out
@@ -208,15 +216,17 @@ public final class ZoneListener implements Listener {
             final double strength = Math.max(0.45, Math.min(0.45 + depth * 0.4, 1.2));
             final Zone finalDenied = denied;
             Bukkit.getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline()) return;
-                applyKnockback(player, finalDenied, strength);
+                Player p = Bukkit.getPlayer(uuid);
+                if (p == null || !p.isOnline()) return;
+                applyKnockback(p, finalDenied, strength);
             });
         } else {
             // Entering from outside: arc-bounce like a slime block
             final Location pushFrom = from.clone();
             final Location pushTo = to.clone();
             Bukkit.getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline()) return;
+                Player p = Bukkit.getPlayer(uuid);
+                if (p == null || !p.isOnline()) return;
                 Vector dir = pushFrom.toVector().subtract(pushTo.toVector());
                 Vector vel;
                 if (dir.lengthSquared() > 0.001) {
@@ -225,7 +235,7 @@ public final class ZoneListener implements Listener {
                     vel = new Vector(0, 0, 0);
                 }
                 vel.setY(0.45);
-                player.setVelocity(vel);
+                p.setVelocity(vel);
             });
         }
     }
@@ -267,7 +277,7 @@ public final class ZoneListener implements Listener {
             player.teleport(spawn);
             plugin.getMessages().send(player, "zone.restricted-teleported");
         } else {
-            Location safe = calcSafePosition(player.getLocation(), denied);
+            Location safe = calcSafePosition(player, player.getLocation(), denied);
             if (safe != null) {
                 player.teleport(safe);
                 sendDenyMessage(player, denied);
@@ -289,14 +299,15 @@ public final class ZoneListener implements Listener {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private Location calcSafePosition(Location loc, Zone denied) {
+    private Location calcSafePosition(Player player, Location loc, Zone denied) {
         double[] offsets = {2, 4, 6, 8};
         double[] angles = {0, 45, 90, 135, 180, 225, 270, 315};
         for (double r : offsets) {
             for (double a : angles) {
                 double rad = Math.toRadians(a);
                 Location candidate = loc.clone().add(Math.cos(rad) * r, 0, Math.sin(rad) * r);
-                if (!denied.contains(candidate)) {
+                // Use getDeniedZoneAt so we only accept locations this player is allowed to stand in.
+                if (zoneManager.getDeniedZoneAt(player, candidate) == null) {
                     return candidate;
                 }
             }

@@ -32,11 +32,20 @@ public class LobbyBlockManager {
         if (lobbyBlocksFile == null) {
             lobbyBlocksFile = new File(plugin.getDataFolder(), "lobbyblocks.yml");
         }
-        
+
         if (!lobbyBlocksFile.exists()) {
-            plugin.saveResource("lobbyblocks.yml", false);
+            if (plugin.getResource("lobbyblocks.yml") != null) {
+                plugin.saveResource("lobbyblocks.yml", false);
+            } else {
+                try {
+                    lobbyBlocksFile.getParentFile().mkdirs();
+                    lobbyBlocksFile.createNewFile();
+                } catch (IOException e) {
+                    plugin.getLogger().log(Level.SEVERE, "Could not create lobbyblocks.yml", e);
+                }
+            }
         }
-        
+
         lobbyBlocksConfig = YamlConfiguration.loadConfiguration(lobbyBlocksFile);
         
         // Load existing block keys
@@ -55,53 +64,66 @@ public class LobbyBlockManager {
         }
     }
 
+    private static String toKey(Location location) {
+        if (location.getWorld() == null) {
+            throw new IllegalArgumentException("Location world is null");
+        }
+        // Escape colons in world name so the key always has exactly 4 parts
+        String worldName = location.getWorld().getName().replace(":", "_");
+        return worldName + ":" + location.getBlockX() + ":" + location.getBlockY() + ":" + location.getBlockZ();
+    }
+
     public void addLobbyBlock(Location location) {
-        String key = location.getWorld().getName() + ":" + 
-                     location.getBlockX() + ":" + 
-                     location.getBlockY() + ":" + 
-                     location.getBlockZ();
-        
-        lobbyBlockKeys.add(key);
-        updateConfig();
+        if (location.getWorld() == null) return;
+        lobbyBlockKeys.add(toKey(location));
+        scheduleSave();
     }
 
     public void removeLobbyBlock(Location location) {
-        String key = location.getWorld().getName() + ":" + 
-                     location.getBlockX() + ":" + 
-                     location.getBlockY() + ":" + 
-                     location.getBlockZ();
-        
-        lobbyBlockKeys.remove(key);
-        updateConfig();
+        if (location.getWorld() == null) return;
+        lobbyBlockKeys.remove(toKey(location));
+        scheduleSave();
     }
 
     public boolean isLobbyBlock(Location location) {
-        String key = location.getWorld().getName() + ":" + 
-                     location.getBlockX() + ":" + 
-                     location.getBlockY() + ":" + 
-                     location.getBlockZ();
-        return lobbyBlockKeys.contains(key);
+        if (location.getWorld() == null) return false;
+        return lobbyBlockKeys.contains(toKey(location));
     }
 
-    private void updateConfig() {
-        lobbyBlocksConfig.set("blocks", new ArrayList<>(lobbyBlockKeys));
-        saveLobbyBlocksConfig();
+    private int pendingSaveTaskId = -1;
+
+    private void scheduleSave() {
+        // Debounce: only write to disk once per tick at most, avoiding per-block I/O spikes
+        if (pendingSaveTaskId != -1) return;
+        // Capture the config reference now so a concurrent reload cannot swap it out
+        // between when the task is scheduled and when it fires.
+        final FileConfiguration configSnapshot = lobbyBlocksConfig;
+        pendingSaveTaskId = Bukkit.getScheduler().runTask(plugin, () -> {
+            pendingSaveTaskId = -1;
+            configSnapshot.set("blocks", new ArrayList<>(lobbyBlockKeys));
+            saveLobbyBlocksConfig();
+        }).getTaskId();
     }
 
     public void removeAllLobbyBlocks() {
         plugin.getLogger().info("Removing all lobby blocks...");
         int removed = 0;
-        
+        int skipped = 0;
+        Set<String> toRetain = new HashSet<>();
+
         for (String key : new HashSet<>(lobbyBlockKeys)) {
-            String[] parts = key.split(":");
-            if (parts.length != 4) continue;
-            
-            String worldName = parts[0];
+            // Key format: "worldName:x:y:z" (world name has colons replaced with '_')
+            // Split from the right to always get exactly the last 3 numeric parts
+            int last = key.lastIndexOf(':');
+            int mid  = key.lastIndexOf(':', last - 1);
+            int first = key.lastIndexOf(':', mid - 1);
+            if (first < 0) continue;
+            String worldName = key.substring(0, first);
             try {
-                int x = Integer.parseInt(parts[1]);
-                int y = Integer.parseInt(parts[2]);
-                int z = Integer.parseInt(parts[3]);
-                
+                int x = Integer.parseInt(key.substring(first + 1, mid));
+                int y = Integer.parseInt(key.substring(mid + 1, last));
+                int z = Integer.parseInt(key.substring(last + 1));
+
                 World world = Bukkit.getWorld(worldName);
                 if (world != null) {
                     Block block = world.getBlockAt(x, y, z);
@@ -110,55 +132,74 @@ public class LobbyBlockManager {
                         block.setType(Material.AIR);
                         removed++;
                     }
+                } else {
+                    // World not loaded — keep the key so these blocks can be cleaned up
+                    // the next time the world loads rather than being silently orphaned.
+                    toRetain.add(key);
+                    skipped++;
                 }
             } catch (NumberFormatException e) {
-                // Invalid coordinates, skip
+                // Invalid coordinates — discard
             }
         }
-        
+
         lobbyBlockKeys.clear();
-        updateConfig();
-        plugin.getLogger().info("Removed " + removed + " lobby blocks.");
+        lobbyBlockKeys.addAll(toRetain);
+        lobbyBlocksConfig.set("blocks", new ArrayList<>(lobbyBlockKeys));
+        saveLobbyBlocksConfig();
+        plugin.getLogger().info("Removed " + removed + " lobby blocks."
+                + (skipped > 0 ? " Skipped " + skipped + " in unloaded worlds." : ""));
     }
 
     public void cleanupExpiredBlocks() {
-        // Remove any lobby blocks that are no longer SANDSTONE or REDSTONE_BLOCK
         Set<String> toRemove = new HashSet<>();
-        
+
         for (String key : lobbyBlockKeys) {
-            String[] parts = key.split(":");
-            if (parts.length != 4) continue;
-            
-            String worldName = parts[0];
+            int last = key.lastIndexOf(':');
+            int mid  = key.lastIndexOf(':', last - 1);
+            int first = key.lastIndexOf(':', mid - 1);
+            if (first < 0) { toRemove.add(key); continue; }
+            String worldName = key.substring(0, first);
             try {
-                int x = Integer.parseInt(parts[1]);
-                int y = Integer.parseInt(parts[2]);
-                int z = Integer.parseInt(parts[3]);
-                
+                int x = Integer.parseInt(key.substring(first + 1, mid));
+                int y = Integer.parseInt(key.substring(mid + 1, last));
+                int z = Integer.parseInt(key.substring(last + 1));
+
                 World world = Bukkit.getWorld(worldName);
                 if (world != null) {
                     Block block = world.getBlockAt(x, y, z);
                     Material type = block.getType();
-                    if (type != Material.DIAMOND_BLOCK && type != Material.SANDSTONE) {
+                    if (type != Material.DIAMOND_BLOCK && type != Material.SANDSTONE
+                            && type != Material.REDSTONE_BLOCK && type != Material.EMERALD_BLOCK) {
                         toRemove.add(key);
                     }
                 } else {
-                    // World not loaded, remove from list
                     toRemove.add(key);
                 }
             } catch (NumberFormatException e) {
                 toRemove.add(key);
             }
         }
-        
+
         if (!toRemove.isEmpty()) {
             lobbyBlockKeys.removeAll(toRemove);
-            updateConfig();
+            scheduleSave();
         }
     }
 
     public void reloadLobbyBlocksConfig() {
+        // Cancel any pending debounced save so it doesn't overwrite the freshly-loaded config.
+        if (pendingSaveTaskId != -1) {
+            Bukkit.getScheduler().cancelTask(pendingSaveTaskId);
+            pendingSaveTaskId = -1;
+        }
         loadLobbyBlocksConfig();
         plugin.getLogger().info("Lobby blocks configuration reloaded!");
+    }
+
+    /** Must be called once from Main.onEnable to periodically prune orphaned block keys. */
+    public void startCleanupTask() {
+        // Run every 5 minutes (6000 ticks)
+        Bukkit.getScheduler().runTaskTimer(plugin, this::cleanupExpiredBlocks, 6000L, 6000L);
     }
 }

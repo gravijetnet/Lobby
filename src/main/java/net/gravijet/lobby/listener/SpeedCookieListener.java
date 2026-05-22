@@ -44,12 +44,18 @@ public class SpeedCookieListener implements Listener {
         Player player = event.getPlayer();
         if (!isSpeedCookie(player.getItemInHand())) return;
 
-        if (player.getFoodLevel() >= 20) {
+        // Lower food level to allow the cookie to be eaten; restore it afterwards
+        // whether or not the consume event fires, to avoid permanently draining food.
+        int prevFood = player.getFoodLevel();
+        if (prevFood >= 20) {
             player.setFoodLevel(6);
             UUID uuid = player.getUniqueId();
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                if (player.isOnline() && player.getFoodLevel() <= 6) {
-                    player.setFoodLevel(20);
+                Player p = Bukkit.getPlayer(uuid);
+                // Only restore if still online and the onConsume handler hasn't already
+                // restored the food level (it sets food back to 20 on a successful eat).
+                if (p != null && p.isOnline() && p.getFoodLevel() <= 6) {
+                    p.setFoodLevel(prevFood);
                 }
             }, 80L);
         }
@@ -60,7 +66,8 @@ public class SpeedCookieListener implements Listener {
         Player player = event.getPlayer();
         if (!isSpeedCookie(event.getItem())) return;
         player.setFoodLevel(20);
-        player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 20 * 60 * 10, 1, false, false), true);
+        // ambient=true shows subtle particles; particles=true shows the effect icon in the HUD
+        player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 20 * 60 * 10, 1, true, true), true);
         plugin.getMessages().send(player, "speedcookie.received-eat");
     }
 

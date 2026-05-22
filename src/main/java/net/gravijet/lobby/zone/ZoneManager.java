@@ -6,7 +6,6 @@ import org.bukkit.ChatColor;
 import org.bukkit.Effect;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -111,8 +110,10 @@ public final class ZoneManager {
     public boolean setZoneDenyMessage(String zoneName, String message) {
         Zone zone = zones.get(zoneName.toLowerCase());
         if (zone == null) return false;
-        message = message.replace("\\n", "\n");
-        zone.setDenyMessage(ChatColor.translateAlternateColorCodes('&', message));
+        // Translate color codes but do NOT replace \n here — the message is stored as-is
+        // and serialized with \n→\\n. Replacing here then having deserialize replace again
+        // would cause double-substitution on the next reload.
+        zone.setDenyMessage(ChatColor.translateAlternateColorCodes('&', message.replace("\\n", "\n")));
         saveAll();
         return true;
     }
@@ -170,9 +171,11 @@ public final class ZoneManager {
     public static ItemStack createWand() {
         ItemStack item = new ItemStack(Material.BLAZE_ROD);
         ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(WAND_NAME);
-        meta.setLore(Arrays.asList("§7Right-click §8» §fAdd corner", "§7Left-click  §8» §fRemove last corner", "§7Shift+Right §8» §fShow selection summary"));
-        item.setItemMeta(meta);
+        if (meta != null) {
+            meta.setDisplayName(WAND_NAME);
+            meta.setLore(Arrays.asList("§7Right-click §8» §fAdd corner", "§7Left-click  §8» §fRemove last corner", "§7Shift+Right §8» §fShow selection summary"));
+            item.setItemMeta(meta);
+        }
         return item;
     }
 
@@ -233,39 +236,6 @@ public final class ZoneManager {
         return configManager;
     }
 
-    public static Vector calculateKnockbackVector(Player player, Zone zone) {
-        Location playerLoc = player.getLocation();
-        Location nearestBoundary = findNearestBoundaryPoint(playerLoc, zone);
-
-        if (nearestBoundary == null) {
-            return calculateCentroidKnockback(playerLoc, zone);
-        }
-
-        // Determine if player is inside the zone
-        boolean playerInside = zone.contains(playerLoc);
-
-        double dx, dz;
-        if (playerInside) {
-            // Player is inside zone, push towards boundary (to exit)
-            dx = nearestBoundary.getX() - playerLoc.getX();
-            dz = nearestBoundary.getZ() - playerLoc.getZ();
-        } else {
-            // Player is outside zone, push away from boundary (back away)
-            dx = playerLoc.getX() - nearestBoundary.getX();
-            dz = playerLoc.getZ() - nearestBoundary.getZ();
-        }
-        double dy = playerLoc.getY() - nearestBoundary.getY();
-
-        double distance = Math.sqrt(dx * dx + dz * dz);
-        double strength = 2.0;
-
-        if (distance > 0.01) {
-            return new Vector((dx / distance) * strength, 0.5, (dz / distance) * strength);
-        }
-
-        return new Vector(0, 0.5, 0);
-    }
-
     public static Location findNearestBoundaryPoint(Location playerLoc, Zone zone) {
         List<int[]> corners = zone.getCorners();
         if (corners.size() < 2) return null;
@@ -293,40 +263,13 @@ public final class ZoneManager {
 
     public static Location closestPointOnSegment(Location a, Location b, Location p) {
         Vector ab = b.toVector().subtract(a.toVector());
+        double lenSq = ab.lengthSquared();
+        if (lenSq < 1e-10) return a; // A and B are the same point
         Vector ap = p.toVector().subtract(a.toVector());
-        double t = ap.dot(ab) / ab.lengthSquared();
+        double t = ap.dot(ab) / lenSq;
         if (t < 0.0) return a;
         if (t > 1.0) return b;
         return a.clone().add(ab.multiply(t));
     }
 
-    private static Vector calculateCentroidKnockback(Location playerLoc, Zone zone) {
-        double cx = 0, cz = 0;
-        for (int[] corner : zone.getCorners()) {
-            cx += corner[0];
-            cz += corner[1];
-        }
-        cx /= zone.getCorners().size();
-        cz /= zone.getCorners().size();
-
-        // Determine if player is inside the zone
-        boolean playerInside = zone.contains(playerLoc);
-
-        double awayX, awayZ;
-        if (playerInside) {
-            // Player is inside zone, push towards centroid (which is inside)
-            // Actually pushing towards centroid would move player deeper, not good
-            // Instead push away from centroid to reach edge
-            awayX = playerLoc.getX() - cx;
-            awayZ = playerLoc.getZ() - cz;
-        } else {
-            // Player is outside zone, push away from centroid
-            awayX = playerLoc.getX() - cx;
-            awayZ = playerLoc.getZ() - cz;
-        }
-
-        double len = Math.sqrt(awayX * awayX + awayZ * awayZ);
-
-        return len > 0.01 ? new Vector(awayX / len * 1.2, 0.5, awayZ / len * 1.2) : new Vector(0, 0.5, 0);
-    }
 }
