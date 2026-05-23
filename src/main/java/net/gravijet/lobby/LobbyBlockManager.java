@@ -154,7 +154,7 @@ public class LobbyBlockManager {
     public void cleanupExpiredBlocks() {
         Set<String> toRemove = new HashSet<>();
 
-        for (String key : lobbyBlockKeys) {
+        for (String key : new HashSet<>(lobbyBlockKeys)) {
             int last = key.lastIndexOf(':');
             int mid  = key.lastIndexOf(':', last - 1);
             int first = key.lastIndexOf(':', mid - 1);

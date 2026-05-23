@@ -100,7 +100,7 @@ public final class Zone {
         if (permission == null || permission.trim().isEmpty()) {
             this.requiredPermission = "zone.entry." + this.name.toLowerCase();
         } else {
-            this.requiredPermission = permission.trim().toLowerCase();
+            this.requiredPermission = permission.trim();
         }
     }
 

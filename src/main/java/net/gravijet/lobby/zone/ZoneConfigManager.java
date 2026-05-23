@@ -107,7 +107,7 @@ public class ZoneConfigManager {
         } catch (IOException e) {
             plugin.getLogger().log(Level.SEVERE, "Could not save zones.yml", e);
             zonesConfig = previous; // restore on failure so in-memory state stays valid
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
             plugin.getLogger().log(Level.SEVERE, "Unexpected error serializing zones", e);
             zonesConfig = previous;
         }

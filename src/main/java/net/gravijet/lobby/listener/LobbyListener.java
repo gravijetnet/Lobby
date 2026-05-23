@@ -73,6 +73,7 @@ public class LobbyListener implements Listener {
     }
 
     private void tickEnderButt() {
+        if (enderButtPearls.isEmpty()) return;
         Iterator<Map.Entry<UUID, EnderPearl>> it = enderButtPearls.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<UUID, EnderPearl> entry = it.next();
@@ -85,6 +86,11 @@ public class LobbyListener implements Listener {
             }
 
             Location currentLoc = pearl.getLocation();
+            if (currentLoc.getWorld() == null) {
+                it.remove();
+                lastPearlLoc.remove(uuid);
+                continue;
+            }
             Location previousLoc = lastPearlLoc.get(uuid);
 
             // Check for collision if we have previous location
@@ -256,7 +262,7 @@ public class LobbyListener implements Listener {
                 ItemMeta slot4Meta = slot4.getItemMeta();
                 isNamedLobbyBlock = slot4Meta != null
                     && "§cBlocks".equals(slot4Meta.getDisplayName())
-                    && (slot4.getType() == Material.SANDSTONE || slot4.getType() == Material.DIAMOND_BLOCK);
+                    && slot4.getType() == Material.SANDSTONE;
             }
             if (isNamedLobbyBlock) {
                 slot4.setAmount(64);
@@ -385,7 +391,7 @@ public class LobbyListener implements Listener {
 
     @EventHandler
     public void onDamage(EntityDamageEvent event) {
-        if (event.getEntity() instanceof Player && event.getCause() != EntityDamageEvent.DamageCause.VOID) {
+        if (event.getEntity() instanceof Player) {
             event.setCancelled(true);
         }
     }
@@ -447,10 +453,12 @@ public class LobbyListener implements Listener {
             player.playSound(player.getLocation(), Sound.ENDERMAN_TELEPORT, 1.0f, 1.0f);
             EnderPearl pearl = player.launchProjectile(EnderPearl.class);
             pearl.setVelocity(player.getLocation().getDirection().multiply(1.5));
-            pearl.setPassenger(player);
             enderButtPearls.put(uuid, pearl);
             lastPearlLoc.put(uuid, pearl.getLocation().clone());
-            Bukkit.getScheduler().runTask(plugin, player::updateInventory);
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (!pearl.isDead() && pearl.isValid()) pearl.setPassenger(player);
+                player.updateInventory();
+            });
         } else if (item.getType() == Material.GOLD_INGOT && nameEquals(item, "§cCoinshop")) {
             Bukkit.getScheduler().runTask(plugin, () -> player.performCommand("coinshop"));
         } else if (item.getType() == Material.REDSTONE_TORCH_ON && nameEquals(item, "§cSettings")) {
@@ -542,7 +550,8 @@ public class LobbyListener implements Listener {
     }
 
     private boolean hasSolidBlockBetween(Location from, Location to) {
-        if (from == null || to == null || !from.getWorld().equals(to.getWorld())) {
+        if (from == null || to == null || from.getWorld() == null || to.getWorld() == null
+                || !from.getWorld().equals(to.getWorld())) {
             return false;
         }
 
@@ -552,7 +561,7 @@ public class LobbyListener implements Listener {
         }
 
         Vector direction = to.toVector().subtract(from.toVector()).normalize();
-        int maxDistance = (int) Math.ceil(distance) + 2;
+        int maxDistance = (int) Math.ceil(distance);
 
         // Use BlockIterator for ray casting with smaller step size
         BlockIterator iterator = new BlockIterator(from.getWorld(), from.toVector(), direction, 0, maxDistance);

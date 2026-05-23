@@ -29,10 +29,10 @@ public class FlyCommand implements CommandExecutor {
                 msg.send(player, "general.no-permission");
                 return true;
             }
-            if (player.getAllowFlight()) {
+            if (!plugin.isFlightDisabledByUser(player)) {
+                plugin.setFlightPreference(player, false);
                 player.setAllowFlight(false);
                 player.setFlying(false);
-                plugin.setFlightPreference(player, false);
                 msg.send(player, "fly.disabled");
             } else {
                 plugin.setFlightPreference(player, true);
@@ -53,10 +53,10 @@ public class FlyCommand implements CommandExecutor {
             return true;
         }
 
-        if (target.getAllowFlight()) {
+        if (!plugin.isFlightDisabledByUser(target)) {
+            plugin.setFlightPreference(target, false);
             target.setAllowFlight(false);
             target.setFlying(false);
-            plugin.setFlightPreference(target, false);
             msg.send(target, "fly.disabled-by", "player", sender.getName());
             msg.send(sender, "fly.disabled-for", "player", target.getName());
         } else {

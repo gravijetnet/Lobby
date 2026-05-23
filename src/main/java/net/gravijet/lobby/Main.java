@@ -147,6 +147,7 @@ public class Main extends JavaPlugin {
 
     public void setupWorld(World world) {
         world.setGameRuleValue("doDaylightCycle", "false");
+        world.setGameRuleValue("doWeatherCycle", "false");
         world.setTime(6000);
         world.setStorm(false);
         world.setThundering(false);
@@ -458,6 +459,7 @@ public class Main extends JavaPlugin {
         if (!getConfig().contains("spawn.world")) return null;
 
         String worldName = getConfig().getString("spawn.world");
+        if (worldName == null) return null;
         World world = Bukkit.getWorld(worldName);
         if (world == null) return null;
 

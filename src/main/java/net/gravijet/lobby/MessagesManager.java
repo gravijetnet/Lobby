@@ -6,6 +6,8 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -26,11 +28,14 @@ public class MessagesManager {
             plugin.saveResource("messages.yml", false);
         }
         config = YamlConfiguration.loadConfiguration(file);
-        var stream = plugin.getResource("messages.yml");
+        InputStream stream = plugin.getResource("messages.yml");
         if (stream != null) {
-            FileConfiguration defaults = YamlConfiguration.loadConfiguration(
-                    new InputStreamReader(stream, StandardCharsets.UTF_8));
-            config.setDefaults(defaults);
+            try (InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
+                FileConfiguration defaults = YamlConfiguration.loadConfiguration(reader);
+                config.setDefaults(defaults);
+            } catch (IOException e) {
+                plugin.getLogger().warning("Could not load default messages.yml from jar: " + e.getMessage());
+            }
         }
     }
 

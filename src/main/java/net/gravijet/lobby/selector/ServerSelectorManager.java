@@ -131,13 +131,13 @@ public class ServerSelectorManager {
     }
 
     private void executeActions(Player player, List<String> actions) {
-        // Sanitize the player name so it cannot inject extra commands when substituted.
-        String safeName = player.getName().replaceAll("[^a-zA-Z0-9_]", "");
+        // For console commands, sanitize the name to prevent command injection via unusual characters.
+        String safeName = player.getName().replaceAll("[^a-zA-Z0-9_.]", "");
         for (String action : actions) {
             if (action.startsWith("connect:")) {
                 // Strip non-printable/control characters from the server name.
-                String server = action.substring(8).replaceAll("[\\x00-\\x1F\\x7F]", "");
-                connectToServer(player, server);
+                String server = action.substring(8).replaceAll("[\\x00-\\x1F\\x7F]", "").trim();
+                if (!server.isEmpty()) connectToServer(player, server);
             } else if (action.startsWith("command:")) {
                 // Strip newlines and semicolons that could chain additional commands.
                 String cmd = action.substring(8)
@@ -145,8 +145,9 @@ public class ServerSelectorManager {
                         .replaceAll("[;\n\r]", "");
                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd);
             } else if (action.startsWith("playercommand:")) {
+                // Player runs the command as themselves; no injection risk from their own name.
                 String cmd = action.substring(14)
-                        .replace("%player%", safeName)
+                        .replace("%player%", player.getName())
                         .replaceAll("[;\n\r]", "");
                 player.performCommand(cmd);
             }

@@ -104,7 +104,7 @@ public final class ZoneCommand implements CommandExecutor {
         }
 
         String name = args[1];
-        if (name.contains(" ") || name.isEmpty()) {
+        if (name.isEmpty()) {
             msg.send(player, "zone.save.invalid-name");
             return;
         }
@@ -268,7 +268,7 @@ public final class ZoneCommand implements CommandExecutor {
             if (i > 2) sb.append(' ');
             sb.append(args[i]);
         }
-        if (zoneManager.setZoneDenyMessage(args[1], sb.toString().replace("\\n", "\n"))) {
+        if (zoneManager.setZoneDenyMessage(args[1], sb.toString())) {
             msg.send(sender, "zone.setmessage.set", "name", args[1]);
         } else {
             msg.send(sender, "zone.setmessage.not-found", "name", args[1]);

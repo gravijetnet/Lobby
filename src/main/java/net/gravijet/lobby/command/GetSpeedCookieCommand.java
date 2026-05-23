@@ -74,8 +74,9 @@ public class GetSpeedCookieCommand implements CommandExecutor {
         long now = System.currentTimeMillis();
         cooldowns.put(uuid, now);
         plugin.getPlayersConfig().set(uuid + ".cookie-cooldown", now);
-        // Save asynchronously to avoid freezing the main thread on every click.
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, plugin::savePlayersConfig);
+        // Save synchronously — YamlConfiguration.save is not thread-safe, so we cannot
+        // call it from an async task while the main thread may still be mutating the config.
+        plugin.savePlayersConfig();
 
         plugin.getMessages().send(player, "speedcookie.received-menu");
     }

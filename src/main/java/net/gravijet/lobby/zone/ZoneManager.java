@@ -180,7 +180,9 @@ public final class ZoneManager {
     }
 
     public static boolean isWand(ItemStack item) {
-        return item != null && item.getType() == Material.BLAZE_ROD && item.hasItemMeta() && WAND_NAME.equals(item.getItemMeta().getDisplayName());
+        if (item == null || item.getType() != Material.BLAZE_ROD || !item.hasItemMeta()) return false;
+        ItemMeta meta = item.getItemMeta();
+        return meta != null && WAND_NAME.equals(meta.getDisplayName());
     }
 
     private void tickParticles() {

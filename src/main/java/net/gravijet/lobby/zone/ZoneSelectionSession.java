@@ -63,7 +63,7 @@ public final class ZoneSelectionSession {
         lines.add("§7Corners: §f" + corners.size());
         for (int i = 0; i < corners.size(); i++) {
             Location c = corners.get(i);
-            lines.add(String.format("§7  #%d §f(%d, %d, %d)", i + 1, c.getBlockX(), c.getBlockY(), c.getBlockZ()));
+            lines.add(String.format("§7  #%d §f(%d, %d)", i + 1, c.getBlockX(), c.getBlockZ()));
         }
         if (isComplete()) {
             lines.add("§aValid polygon — use §e/zone save <name> §ato save.");

@@ -34,10 +34,20 @@ public class ProtocolCheckListener implements Listener {
             try {
                 Class<?> viaClass = Class.forName(className);
                 api = viaClass.getMethod("getAPI").invoke(null);
-                method = api.getClass().getMethod("getPlayerVersion", Object.class);
+                // ViaVersion 4.x accepts UUID; older versions accept Object
+                Method m = null;
+                for (Class<?> paramType : new Class<?>[]{java.util.UUID.class, Object.class}) {
+                    try {
+                        m = api.getClass().getMethod("getPlayerVersion", paramType);
+                        break;
+                    } catch (NoSuchMethodException ignored) {
+                        // try next parameter type
+                    }
+                }
+                method = m;
                 break;
             } catch (ReflectiveOperationException e) {
-                // This package not present — try the next one
+                api = null; // this package not present — try the next one
             }
         }
 
