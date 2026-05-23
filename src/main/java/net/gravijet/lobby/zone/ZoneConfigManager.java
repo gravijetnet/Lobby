@@ -170,15 +170,18 @@ public class ZoneConfigManager {
         for (String raw : rawCorners) {
             String[] parts = raw.split(",");
             if (parts.length != 2) {
-                plugin.getLogger().warning("Zone '" + name + "': invalid corner '" + raw + "' — skipping.");
-                return null;
+                plugin.getLogger().warning("Zone '" + name + "': invalid corner '" + raw + "' — skipping corner.");
+                continue;
             }
             try {
                 corners.add(new int[]{Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim())});
             } catch (NumberFormatException e) {
-                plugin.getLogger().warning("Zone '" + name + "': non-integer corner '" + raw + "' — skipping.");
-                return null;
+                plugin.getLogger().warning("Zone '" + name + "': non-integer corner '" + raw + "' — skipping corner.");
             }
+        }
+        if (corners.size() < 3) {
+            plugin.getLogger().warning("Zone '" + name + "' has fewer than 3 valid corners after parsing — skipping.");
+            return null;
         }
 
         Zone zone = new Zone(name, world, minY, maxY, corners);

@@ -33,7 +33,7 @@ public final class Zone {
         this.minY = minY;
         this.maxY = maxY;
         this.corners = Collections.unmodifiableList(new ArrayList<>(corners));
-        this.requiredPermission = "zone.entry." + this.name.toLowerCase();
+        this.requiredPermission = "";
         this.denyMessage = DEFAULT_DENY_MESSAGE;
         this.allowBlockPlacement = false;
 
@@ -98,7 +98,7 @@ public final class Zone {
 
     void setRequiredPermission(String permission) {
         if (permission == null || permission.trim().isEmpty()) {
-            this.requiredPermission = "zone.entry." + this.name.toLowerCase();
+            this.requiredPermission = "";
         } else {
             this.requiredPermission = permission.trim();
         }

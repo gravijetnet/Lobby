@@ -73,6 +73,26 @@ public class LobbyBlockManager {
         return worldName + ":" + location.getBlockX() + ":" + location.getBlockY() + ":" + location.getBlockZ();
     }
 
+    /**
+     * Parses a stored key back into its components.
+     * Returns an array of [worldNameEnd, x, y, z] as indices/values, or null if invalid.
+     * Specifically returns a String[4]: [worldName, xStr, yStr, zStr].
+     */
+    private static String[] parseKey(String key) {
+        int last = key.lastIndexOf(':');
+        if (last < 0) return null;
+        int mid = key.lastIndexOf(':', last - 1);
+        if (mid < 0) return null;
+        int first = key.lastIndexOf(':', mid - 1);
+        if (first < 0) return null;
+        return new String[]{
+            key.substring(0, first),
+            key.substring(first + 1, mid),
+            key.substring(mid + 1, last),
+            key.substring(last + 1)
+        };
+    }
+
     public void addLobbyBlock(Location location) {
         if (location.getWorld() == null) return;
         lobbyBlockKeys.add(toKey(location));
@@ -95,12 +115,9 @@ public class LobbyBlockManager {
     private void scheduleSave() {
         // Debounce: only write to disk once per tick at most, avoiding per-block I/O spikes
         if (pendingSaveTaskId != -1) return;
-        // Capture the config reference now so a concurrent reload cannot swap it out
-        // between when the task is scheduled and when it fires.
-        final FileConfiguration configSnapshot = lobbyBlocksConfig;
         pendingSaveTaskId = Bukkit.getScheduler().runTask(plugin, () -> {
             pendingSaveTaskId = -1;
-            configSnapshot.set("blocks", new ArrayList<>(lobbyBlockKeys));
+            lobbyBlocksConfig.set("blocks", new ArrayList<>(lobbyBlockKeys));
             saveLobbyBlocksConfig();
         }).getTaskId();
     }
@@ -112,17 +129,13 @@ public class LobbyBlockManager {
         Set<String> toRetain = new HashSet<>();
 
         for (String key : new HashSet<>(lobbyBlockKeys)) {
-            // Key format: "worldName:x:y:z" (world name has colons replaced with '_')
-            // Split from the right to always get exactly the last 3 numeric parts
-            int last = key.lastIndexOf(':');
-            int mid  = key.lastIndexOf(':', last - 1);
-            int first = key.lastIndexOf(':', mid - 1);
-            if (first < 0) continue;
-            String worldName = key.substring(0, first);
+            String[] parts = parseKey(key);
+            if (parts == null) continue;
             try {
-                int x = Integer.parseInt(key.substring(first + 1, mid));
-                int y = Integer.parseInt(key.substring(mid + 1, last));
-                int z = Integer.parseInt(key.substring(last + 1));
+                String worldName = parts[0];
+                int x = Integer.parseInt(parts[1]);
+                int y = Integer.parseInt(parts[2]);
+                int z = Integer.parseInt(parts[3]);
 
                 World world = Bukkit.getWorld(worldName);
                 if (world != null) {
@@ -155,15 +168,13 @@ public class LobbyBlockManager {
         Set<String> toRemove = new HashSet<>();
 
         for (String key : new HashSet<>(lobbyBlockKeys)) {
-            int last = key.lastIndexOf(':');
-            int mid  = key.lastIndexOf(':', last - 1);
-            int first = key.lastIndexOf(':', mid - 1);
-            if (first < 0) { toRemove.add(key); continue; }
-            String worldName = key.substring(0, first);
+            String[] parts = parseKey(key);
+            if (parts == null) { toRemove.add(key); continue; }
             try {
-                int x = Integer.parseInt(key.substring(first + 1, mid));
-                int y = Integer.parseInt(key.substring(mid + 1, last));
-                int z = Integer.parseInt(key.substring(last + 1));
+                String worldName = parts[0];
+                int x = Integer.parseInt(parts[1]);
+                int y = Integer.parseInt(parts[2]);
+                int z = Integer.parseInt(parts[3]);
 
                 World world = Bukkit.getWorld(worldName);
                 if (world != null) {

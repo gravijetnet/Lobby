@@ -64,11 +64,11 @@ public class GetSpeedCookieCommand implements CommandExecutor {
         // Give the item FIRST so that a crash between this line and the cooldown save
         // does not permanently burn the cooldown without the player receiving the cookie.
         Map<Integer, ItemStack> leftover = player.getInventory().addItem(buildGiveCookieItem());
-        player.closeInventory();
         if (!leftover.isEmpty()) {
             plugin.getMessages().send(player, "speedcookie.inventory-full");
             return;
         }
+        player.closeInventory();
 
         // Item successfully placed — now record the cooldown.
         long now = System.currentTimeMillis();
@@ -131,7 +131,12 @@ public class GetSpeedCookieCommand implements CommandExecutor {
             }
             return 0;
         }
-        return Math.max(0, (last + COOLDOWN_MS) - System.currentTimeMillis());
+        long remaining = (last + COOLDOWN_MS) - System.currentTimeMillis();
+        if (remaining <= 0) {
+            cooldowns.remove(uuid);
+            return 0;
+        }
+        return remaining;
     }
 
     private static String formatTime(long ms) {

@@ -1,5 +1,6 @@
 package net.gravijet.lobby;
 
+import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 
@@ -12,6 +13,7 @@ public class VisibilityManager {
     private final Main plugin;
     private File visibilityFile;
     private FileConfiguration visibilityConfig;
+    private int pendingSaveTaskId = -1;
 
     public VisibilityManager(Main plugin) {
         this.plugin = plugin;
@@ -68,7 +70,17 @@ public class VisibilityManager {
 
     public void setPlayerVisibility(UUID playerId, String visibility) {
         getVisibilityConfig().set("players." + playerId + ".visibility", visibility);
-        saveVisibilityConfig();
+        scheduleSaveVisibilityConfig();
+    }
+
+    private void scheduleSaveVisibilityConfig() {
+        if (pendingSaveTaskId != -1) {
+            Bukkit.getScheduler().cancelTask(pendingSaveTaskId);
+        }
+        pendingSaveTaskId = Bukkit.getScheduler().runTask(plugin, () -> {
+            pendingSaveTaskId = -1;
+            saveVisibilityConfig();
+        }).getTaskId();
     }
 
     public void migrateFromMainConfig() {

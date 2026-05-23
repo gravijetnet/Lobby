@@ -114,6 +114,14 @@ public class ServerSelectorManager {
         return item;
     }
 
+    public boolean isSelectorTitle(String title) {
+        ConfigurationSection menuConfig = config.getConfigurationSection("server-selector.default");
+        if (menuConfig == null) return false;
+        String configTitle = ChatColor.translateAlternateColorCodes('&',
+                menuConfig.getString("title", "Server Selector"));
+        return configTitle.equals(title);
+    }
+
     public void handleMenuClick(Player player, int slot) {
         ConfigurationSection menuConfig = config.getConfigurationSection("server-selector.default");
         if (menuConfig == null) return;
@@ -123,6 +131,7 @@ public class ServerSelectorManager {
             for (String key : itemsSection.getKeys(false)) {
                 ConfigurationSection itemSection = itemsSection.getConfigurationSection(key);
                 if (itemSection != null && itemSection.getInt("slot", -1) == slot) {
+                    player.closeInventory();
                     executeActions(player, itemSection.getStringList("actions"));
                     return;
                 }

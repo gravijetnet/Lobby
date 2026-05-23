@@ -16,8 +16,8 @@ public class ProtocolCheckListener implements Listener {
     private final Main plugin;
 
     // Cached reflection state — resolved once at construction time.
-    private final Object viaApi;       // com.viaversion…Via.getAPI() result, or null
-    private final Method getVersion;   // api.getPlayerVersion(Object), or null
+    private final Object viaApi;        // com.viaversion…Via.getAPI() result, or null
+    private final Method getVersion;    // api.getPlayerVersion(Object), or null
 
     public ProtocolCheckListener(Main plugin) {
         this.plugin = plugin;
@@ -34,14 +34,15 @@ public class ProtocolCheckListener implements Listener {
             try {
                 Class<?> viaClass = Class.forName(className);
                 api = viaClass.getMethod("getAPI").invoke(null);
-                // ViaVersion 4.x accepts UUID; older versions accept Object
+                // ViaVersion 4.x accepts UUID; older versions accept Object (UUID works too)
                 Method m = null;
-                for (Class<?> paramType : new Class<?>[]{java.util.UUID.class, Object.class}) {
+                try {
+                    m = api.getClass().getMethod("getPlayerVersion", java.util.UUID.class);
+                } catch (NoSuchMethodException ignored) {
                     try {
-                        m = api.getClass().getMethod("getPlayerVersion", paramType);
-                        break;
-                    } catch (NoSuchMethodException ignored) {
-                        // try next parameter type
+                        m = api.getClass().getMethod("getPlayerVersion", Object.class);
+                    } catch (NoSuchMethodException ignored2) {
+                        // method not found
                     }
                 }
                 method = m;
@@ -80,12 +81,14 @@ public class ProtocolCheckListener implements Listener {
     private int getProtocolVersion(Player player) {
         if (viaApi == null || getVersion == null) return -1;
         try {
-            Object result = getVersion.invoke(viaApi, player);
+            // Always pass UUID — both ViaVersion 4.x (UUID param) and older versions
+            // (Object param that expects a UUID) accept a UUID argument.
+            Object result = getVersion.invoke(viaApi, player.getUniqueId());
             if (result instanceof Number) {
                 return ((Number) result).intValue();
             }
         } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("ViaVersion getPlayerVersion failed: " + e.getMessage());
+            // Silently ignore — log spam on every join is undesirable
         }
         return -1;
     }

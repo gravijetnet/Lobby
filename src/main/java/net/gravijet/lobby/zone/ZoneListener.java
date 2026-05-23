@@ -28,6 +28,7 @@ public final class ZoneListener implements Listener {
     private static final long MESSAGE_COOLDOWN_MS = 1500L;
     // Tracks how many ticks a player has been stuck in a denied zone
     private final Map<UUID, Integer> stuckTicks = new HashMap<>();
+    private int stuckCheckTaskId = -1;
 
     public ZoneListener(Main plugin, ZoneManager zoneManager) {
         this.plugin = plugin;
@@ -35,9 +36,16 @@ public final class ZoneListener implements Listener {
         startStuckCheck();
     }
 
+    public void stopTasks() {
+        if (stuckCheckTaskId != -1) {
+            Bukkit.getScheduler().cancelTask(stuckCheckTaskId);
+            stuckCheckTaskId = -1;
+        }
+    }
+
     private void startStuckCheck() {
         // Runs every 10 ticks (~0.5s). After 3 fires (1.5s) stuck → force teleport.
-        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+        stuckCheckTaskId = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 Zone denied = zoneManager.getDeniedZoneAt(player, player.getLocation());
                 if (denied == null) {
@@ -63,7 +71,7 @@ public final class ZoneListener implements Listener {
                 double strength = Math.max(0.6, Math.min(0.6 + depth * 0.8 + fires * 0.3, 5.0));
                 applyKnockback(player, denied, strength);
             }
-        }, 10L, 10L);
+        }, 10L, 10L).getTaskId();
     }
 
     private void ejectToSpawn(Player player, Zone denied) {
@@ -104,8 +112,15 @@ public final class ZoneListener implements Listener {
                 boundary.getZ() + uz * dist,
                 from.getYaw(), from.getPitch()
             );
-            // Use getDeniedZoneAt so we only skip locations the player can't enter.
-            if (zoneManager.getDeniedZoneAt(player, candidate) == null) {
+            if (zoneManager.getDeniedZoneAt(player, candidate) != null) continue;
+            // Validate that there is solid ground below and passable space at/above
+            org.bukkit.block.Block below = candidate.getWorld().getBlockAt(
+                candidate.getBlockX(), candidate.getBlockY() - 1, candidate.getBlockZ());
+            org.bukkit.block.Block at = candidate.getWorld().getBlockAt(
+                candidate.getBlockX(), candidate.getBlockY(), candidate.getBlockZ());
+            org.bukkit.block.Block above = candidate.getWorld().getBlockAt(
+                candidate.getBlockX(), candidate.getBlockY() + 1, candidate.getBlockZ());
+            if (below.getType().isSolid() && !at.getType().isSolid() && !above.getType().isSolid()) {
                 return candidate;
             }
         }
@@ -147,8 +162,8 @@ public final class ZoneListener implements Listener {
             return;
         }
 
-        // Right-click block: add corner
-        if (action == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) {
+        // Right-click block: add corner (skip when sneaking — sneak+right-click shows summary above)
+        if (action == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null && !player.isSneaking()) {
             Location cornerLoc = event.getClickedBlock().getLocation();
             ZoneSelectionSession session = zoneManager.getOrCreateSession(player.getUniqueId());
 
@@ -176,7 +191,7 @@ public final class ZoneListener implements Listener {
 
     // ── Zone Entry / Movement ─────────────────────────────────────────────────
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerMove(PlayerMoveEvent event) {
         if (event.isCancelled() || event.getTo() == null) return;
 
@@ -244,7 +259,15 @@ public final class ZoneListener implements Listener {
         Location loc = player.getLocation();
         Location boundary = ZoneManager.findNearestBoundaryPoint(loc, zone);
         if (boundary == null) {
-            player.setVelocity(new Vector(0, 0.3, 0));
+            // No boundary found — push away using player's look direction (horizontal component)
+            Vector look = player.getLocation().getDirection();
+            look.setY(0);
+            if (look.lengthSquared() > 0.001) {
+                look = look.normalize().multiply(0.3);
+            } else {
+                look = new Vector(0.3, 0, 0);
+            }
+            player.setVelocity(new Vector(look.getX(), 0.3, look.getZ()));
             return;
         }
         boolean inside = zone.contains(loc);

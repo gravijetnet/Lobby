@@ -15,12 +15,15 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 public class SpeedCookieListener implements Listener {
 
     private final Main plugin;
     private final GetSpeedCookieCommand cookieCommand;
+    private final Set<UUID> consuming = new HashSet<>();
 
     public SpeedCookieListener(Main plugin, GetSpeedCookieCommand cookieCommand) {
         this.plugin = plugin;
@@ -44,17 +47,15 @@ public class SpeedCookieListener implements Listener {
         Player player = event.getPlayer();
         if (!isSpeedCookie(player.getItemInHand())) return;
 
-        // Lower food level to allow the cookie to be eaten; restore it afterwards
-        // whether or not the consume event fires, to avoid permanently draining food.
+        UUID uuid = player.getUniqueId();
         int prevFood = player.getFoodLevel();
         if (prevFood >= 20) {
+            consuming.add(uuid);
             player.setFoodLevel(6);
-            UUID uuid = player.getUniqueId();
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 Player p = Bukkit.getPlayer(uuid);
-                // Only restore if still online and the onConsume handler hasn't already
-                // restored the food level (it sets food back to 20 on a successful eat).
-                if (p != null && p.isOnline() && p.getFoodLevel() <= 6) {
+                // Only restore if onConsume did not fire (player is still in consuming set)
+                if (consuming.remove(uuid) && p != null && p.isOnline()) {
                     p.setFoodLevel(prevFood);
                 }
             }, 80L);
@@ -65,6 +66,7 @@ public class SpeedCookieListener implements Listener {
     public void onConsume(PlayerItemConsumeEvent event) {
         Player player = event.getPlayer();
         if (!isSpeedCookie(event.getItem())) return;
+        consuming.remove(player.getUniqueId());
         player.setFoodLevel(20);
         // ambient=true shows subtle particles; particles=true shows the effect icon in the HUD
         player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 20 * 60 * 10, 1, true, true), true);

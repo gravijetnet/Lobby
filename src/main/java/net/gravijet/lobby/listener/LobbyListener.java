@@ -104,14 +104,16 @@ public class LobbyListener implements Listener {
                 Zone deniedZone = zoneManager.getDeniedZoneAt(riderCheck, currentLoc);
                 if (deniedZone != null) {
                     Location safeReturn = (previousLoc != null) ? previousLoc.clone() : null;
+                    Location riderLoc = riderCheck.getLocation();
                     riderCheck.eject();
                     pearl.eject();
                     pearl.remove();
                     it.remove();
                     lastPearlLoc.remove(uuid);
                     if (safeReturn != null && zoneManager.getDeniedZoneAt(riderCheck, safeReturn) == null) {
-                        safeReturn.setYaw(riderCheck.getLocation().getYaw());
-                        safeReturn.setPitch(riderCheck.getLocation().getPitch());
+                        safeReturn.setY(riderLoc.getY());
+                        safeReturn.setYaw(riderLoc.getYaw());
+                        safeReturn.setPitch(riderLoc.getPitch());
                         riderCheck.teleport(safeReturn);
                     }
                     riderCheck.setVelocity(new Vector(0, 0, 0));
@@ -205,11 +207,7 @@ public class LobbyListener implements Listener {
         player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
         plugin.clearScoreboardCache(player.getUniqueId());
         blockDenyCooldowns.remove(player.getUniqueId());
-
-        // Remove player from build mode when leaving
-        if (plugin.isInBuildMode(player)) {
-            plugin.setBuildMode(player, false);
-        }
+        plugin.cleanupPlayerState(player.getUniqueId());
     }
 
     @EventHandler
@@ -229,7 +227,6 @@ public class LobbyListener implements Listener {
 
         // Build mode: unrestricted placement
         if (plugin.isInBuildMode(player)) {
-            event.setCancelled(false);
             return;
         }
 
@@ -365,7 +362,7 @@ public class LobbyListener implements Listener {
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player)) return;
         Player player = (Player) event.getWhoClicked();
-        if (event.getView().getTitle().contains("Server Selector")) {
+        if (plugin.getServerSelectorManager().isSelectorTitle(event.getView().getTitle())) {
             event.setCancelled(true);
             if (event.getClickedInventory() != null && event.getClickedInventory().equals(event.getView().getTopInventory())) {
                 plugin.getServerSelectorManager().handleMenuClick(player, event.getSlot());
@@ -523,7 +520,10 @@ public class LobbyListener implements Listener {
     }
 
     private void ejectAndCancelPearl(Player player) {
-        if (player.isInsideVehicle()) player.getVehicle().eject();
+        if (player.isInsideVehicle()) {
+            org.bukkit.entity.Entity vehicle = player.getVehicle();
+            if (vehicle != null) vehicle.eject();
+        }
         EnderPearl pearl = enderButtPearls.remove(player.getUniqueId());
         lastPearlLoc.remove(player.getUniqueId());
         if (pearl != null && !pearl.isDead()) {
@@ -536,17 +536,25 @@ public class LobbyListener implements Listener {
         if (item == null) return false;
         // Any diamond block is always allowed as a lobby block
         if (item.getType() == Material.DIAMOND_BLOCK) return true;
-        return item.getType() == Material.SANDSTONE && item.hasItemMeta() && "§cBlocks".equals(item.getItemMeta().getDisplayName());
+        if (item.getType() != Material.SANDSTONE || !item.hasItemMeta()) return false;
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return false;
+        return "§cBlocks".equals(meta.getDisplayName());
     }
 
     private boolean isLobbyItem(ItemStack item) {
         if (item == null || !item.hasItemMeta()) return false;
-        String n = item.getItemMeta().getDisplayName();
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return false;
+        String n = meta.getDisplayName();
         return "§cServer Selector".equals(n) || "§cEnder Butt".equals(n) || "§cCoinshop".equals(n) || "§cSettings".equals(n) || "§cFriends".equals(n) || n.contains("visible");
     }
 
     private boolean nameEquals(ItemStack item, String name) {
-        return item.hasItemMeta() && name.equals(item.getItemMeta().getDisplayName());
+        if (!item.hasItemMeta()) return false;
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return false;
+        return name.equals(meta.getDisplayName());
     }
 
     private boolean hasSolidBlockBetween(Location from, Location to) {
@@ -563,14 +571,16 @@ public class LobbyListener implements Listener {
         Vector direction = to.toVector().subtract(from.toVector()).normalize();
         int maxDistance = (int) Math.ceil(distance);
 
-        // Use BlockIterator for ray casting with smaller step size
-        BlockIterator iterator = new BlockIterator(from.getWorld(), from.toVector(), direction, 0, maxDistance);
-
-        while (iterator.hasNext()) {
-            Block block = iterator.next();
-            if (isSolid(block.getType())) {
-                return true;
+        try {
+            BlockIterator iterator = new BlockIterator(from.getWorld(), from.toVector(), direction, 0, maxDistance);
+            while (iterator.hasNext()) {
+                Block block = iterator.next();
+                if (isSolid(block.getType())) {
+                    return true;
+                }
             }
+        } catch (IllegalStateException e) {
+            return false;
         }
 
         return false;

@@ -45,6 +45,7 @@ public class Main extends JavaPlugin {
     private ScoreboardManager scoreboardManager;
     private ServerSelectorManager serverSelectorManager;
     private ZoneManager zoneManager;
+    private ZoneListener zoneListener;
     private VisibilityManager visibilityManager;
     private LobbyBlockManager lobbyBlockManager;
     private MessagesManager messagesManager;
@@ -69,7 +70,8 @@ public class Main extends JavaPlugin {
 
     public void savePlayerFlightPreference(Player player) {
         if (playersConfig == null) return;
-        playersConfig.set(player.getUniqueId() + ".prefers-flight", !isFlightDisabledByUser(player));
+        boolean prefersFlight = isInBuildMode(player) ? true : !isFlightDisabledByUser(player);
+        playersConfig.set(player.getUniqueId() + ".prefers-flight", prefersFlight);
         savePlayersConfig();
     }
 
@@ -97,7 +99,8 @@ public class Main extends JavaPlugin {
 
         GetSpeedCookieCommand cookieCommand = new GetSpeedCookieCommand(this);
         getServer().getPluginManager().registerEvents(new LobbyListener(this, zoneManager, lobbyBlockManager), this);
-        getServer().getPluginManager().registerEvents(new ZoneListener(this, zoneManager), this);
+        zoneListener = new ZoneListener(this, zoneManager);
+        getServer().getPluginManager().registerEvents(zoneListener, this);
         getServer().getPluginManager().registerEvents(new SpeedCookieListener(this, cookieCommand), this);
         getServer().getPluginManager().registerEvents(new ProtocolCheckListener(this), this);
 
@@ -111,7 +114,6 @@ public class Main extends JavaPlugin {
 
         hasPlaceholderAPI = Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null;
 
-        Bukkit.setDefaultGameMode(GameMode.SURVIVAL);
         loadSpawnLocation();
         scoreboardManager = Bukkit.getScoreboardManager();
 
@@ -121,17 +123,18 @@ public class Main extends JavaPlugin {
 
         Bukkit.getScheduler().runTaskTimer(this, this::updateAllScoreboards, 0L, 20L);
 
-        for (Player player : Bukkit.getOnlinePlayers()) {
+        for (Player player : new ArrayList<>(Bukkit.getOnlinePlayers())) {
             setupPlayer(player);
         }
     }
 
     @Override
     public void onDisable() {
+        if (zoneListener != null) zoneListener.stopTasks();
         if (zoneManager != null) zoneManager.stopParticleTask();
         getServer().getMessenger().unregisterOutgoingPluginChannel(this);
         for (Player player : Bukkit.getOnlinePlayers()) {
-            boolean prefersFlight = !isFlightDisabledByUser(player);
+            boolean prefersFlight = isInBuildMode(player) ? true : !isFlightDisabledByUser(player);
             if (playersConfig != null) {
                 playersConfig.set(player.getUniqueId() + ".prefers-flight", prefersFlight);
             }
@@ -169,16 +172,26 @@ public class Main extends JavaPlugin {
         refreshVisibilityForJoin(player);
         updateScoreboard(player);
 
-        Location spawn = getSpawnLocation();
-        if (spawn != null) {
-            player.teleport(spawn);
-        }
-
         boolean prefersFlight = (playersConfig != null)
                 ? playersConfig.getBoolean(player.getUniqueId() + ".prefers-flight", player.hasPermission("lobby.fly"))
                 : player.hasPermission("lobby.fly");
         setFlightPreference(player, prefersFlight);
-        restoreFlightState(player);
+
+        UUID uid = player.getUniqueId();
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            Player p = Bukkit.getPlayer(uid);
+            if (p == null || !p.isOnline()) return;
+            Location spawn = getSpawnLocation();
+            if (spawn != null) {
+                p.teleport(spawn);
+            }
+            restoreFlightState(p);
+        }, 1L);
+    }
+
+    public void cleanupPlayerState(UUID uuid) {
+        flightDisabledByUser.remove(uuid);
+        buildModePlayers.remove(uuid);
     }
 
     public void setupInventory(Player player) {
@@ -568,7 +581,7 @@ public class Main extends JavaPlugin {
             case "%phoenix_player_level_displayname%":
                 return "1";
             default:
-                return placeholder;
+                return "";
         }
     }
 

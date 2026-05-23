@@ -66,6 +66,7 @@ public final class ZoneManager {
 
     public Zone saveZone(String name, ZoneSelectionSession session, int minY, int maxY) {
         if (name == null || name.trim().isEmpty()) throw new IllegalArgumentException("Zone name must not be empty.");
+        if (name.contains(".") || name.contains(":")) throw new IllegalArgumentException("Zone name must not contain '.' or ':'.");
         if (!session.isComplete()) throw new IllegalArgumentException("Selection needs at least 3 corners.");
         if (minY > maxY) throw new IllegalArgumentException("minY must be <= maxY.");
 
@@ -226,6 +227,7 @@ public final class ZoneManager {
     }
 
     private static void spawnDust(Player viewer, double x, double y, double z, float r, float g, float b) {
+        if (viewer.getWorld() == null) return;
         Location loc = new Location(viewer.getWorld(), x, y, z);
         viewer.getWorld().spigot().playEffect(loc, Effect.COLOURED_DUST, 0, 1, r, g, b, 1, 0, 64);
     }
@@ -271,7 +273,7 @@ public final class ZoneManager {
         double t = ap.dot(ab) / lenSq;
         if (t < 0.0) return a;
         if (t > 1.0) return b;
-        return a.clone().add(ab.multiply(t));
+        return a.clone().add(ab.clone().multiply(t));
     }
 
 }
