@@ -11,7 +11,9 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
@@ -63,6 +65,11 @@ public class SpeedCookieListener implements Listener {
     }
 
     @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        consuming.remove(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler
     public void onConsume(PlayerItemConsumeEvent event) {
         Player player = event.getPlayer();
         if (!isSpeedCookie(event.getItem())) return;
@@ -74,6 +81,8 @@ public class SpeedCookieListener implements Listener {
     }
 
     public static boolean isSpeedCookie(ItemStack item) {
-        return item != null && item.getType() == Material.COOKIE && item.hasItemMeta() && "§bSpeed Cookie".equals(item.getItemMeta().getDisplayName());
+        if (item == null || item.getType() != Material.COOKIE || !item.hasItemMeta()) return false;
+        ItemMeta meta = item.getItemMeta();
+        return meta != null && "§bSpeed Cookie".equals(meta.getDisplayName());
     }
 }

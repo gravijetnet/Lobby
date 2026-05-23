@@ -96,7 +96,8 @@ public class ServerSelectorManager {
             for (String line : loreConfig) {
                 // Replace placeholders if PlaceholderAPI is available
                 if (plugin.hasPlaceholderAPI()) {
-                    line = me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, line);
+                    String resolved = me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, line);
+                    if (resolved != null) line = resolved;
                 }
                 lore.add(ChatColor.translateAlternateColorCodes('&', line));
             }
@@ -140,25 +141,35 @@ public class ServerSelectorManager {
     }
 
     private void executeActions(Player player, List<String> actions) {
-        // For console commands, sanitize the name to prevent command injection via unusual characters.
-        String safeName = player.getName().replaceAll("[^a-zA-Z0-9_.]", "");
+        // Sanitize player name: only alphanumeric and underscore (valid Minecraft name chars).
+        String safeName = player.getName().replaceAll("[^a-zA-Z0-9_]", "");
         for (String action : actions) {
             if (action.startsWith("connect:")) {
                 // Strip non-printable/control characters from the server name.
                 String server = action.substring(8).replaceAll("[\\x00-\\x1F\\x7F]", "").trim();
                 if (!server.isEmpty()) connectToServer(player, server);
             } else if (action.startsWith("command:")) {
-                // Strip newlines and semicolons that could chain additional commands.
+                // Use sanitized name and strip all control characters and command separators.
                 String cmd = action.substring(8)
                         .replace("%player%", safeName)
-                        .replaceAll("[;\n\r]", "");
-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd);
+                        .replaceAll("[\\x00-\\x1F\\x7F;|&`$]", "")
+                        .trim();
+                if (!cmd.isEmpty()) {
+                    try {
+                        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd);
+                    } catch (Exception e) {
+                        plugin.getLogger().warning("Error executing selector command '" + cmd + "': " + e.getMessage());
+                    }
+                }
             } else if (action.startsWith("playercommand:")) {
-                // Player runs the command as themselves; no injection risk from their own name.
+                // Use safeName here too to protect offline-mode servers with unusual player names.
                 String cmd = action.substring(14)
-                        .replace("%player%", player.getName())
-                        .replaceAll("[;\n\r]", "");
-                player.performCommand(cmd);
+                        .replace("%player%", safeName)
+                        .replaceAll("[\\x00-\\x1F\\x7F;|&`$]", "")
+                        .trim();
+                if (!cmd.isEmpty()) {
+                    player.performCommand(cmd);
+                }
             }
         }
     }

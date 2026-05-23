@@ -46,6 +46,7 @@ public class Main extends JavaPlugin {
     private ServerSelectorManager serverSelectorManager;
     private ZoneManager zoneManager;
     private ZoneListener zoneListener;
+    private net.gravijet.lobby.listener.LobbyListener lobbyListener;
     private VisibilityManager visibilityManager;
     private LobbyBlockManager lobbyBlockManager;
     private MessagesManager messagesManager;
@@ -70,7 +71,7 @@ public class Main extends JavaPlugin {
 
     public void savePlayerFlightPreference(Player player) {
         if (playersConfig == null) return;
-        boolean prefersFlight = isInBuildMode(player) ? true : !isFlightDisabledByUser(player);
+        boolean prefersFlight = isInBuildMode(player) || !isFlightDisabledByUser(player);
         playersConfig.set(player.getUniqueId() + ".prefers-flight", prefersFlight);
         savePlayersConfig();
     }
@@ -98,7 +99,8 @@ public class Main extends JavaPlugin {
         getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
 
         GetSpeedCookieCommand cookieCommand = new GetSpeedCookieCommand(this);
-        getServer().getPluginManager().registerEvents(new LobbyListener(this, zoneManager, lobbyBlockManager), this);
+        lobbyListener = new LobbyListener(this, zoneManager, lobbyBlockManager);
+        getServer().getPluginManager().registerEvents(lobbyListener, this);
         zoneListener = new ZoneListener(this, zoneManager);
         getServer().getPluginManager().registerEvents(zoneListener, this);
         getServer().getPluginManager().registerEvents(new SpeedCookieListener(this, cookieCommand), this);
@@ -121,6 +123,9 @@ public class Main extends JavaPlugin {
             setupWorld(world);
         }
 
+        // Worlds are now loaded — safe to clean up any persisted lobby blocks
+        lobbyBlockManager.removeAllLobbyBlocks();
+
         Bukkit.getScheduler().runTaskTimer(this, this::updateAllScoreboards, 0L, 20L);
 
         for (Player player : new ArrayList<>(Bukkit.getOnlinePlayers())) {
@@ -130,11 +135,12 @@ public class Main extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (lobbyListener != null) lobbyListener.stopTasks();
         if (zoneListener != null) zoneListener.stopTasks();
         if (zoneManager != null) zoneManager.stopParticleTask();
         getServer().getMessenger().unregisterOutgoingPluginChannel(this);
         for (Player player : Bukkit.getOnlinePlayers()) {
-            boolean prefersFlight = isInBuildMode(player) ? true : !isFlightDisabledByUser(player);
+            boolean prefersFlight = isInBuildMode(player) || !isFlightDisabledByUser(player);
             if (playersConfig != null) {
                 playersConfig.set(player.getUniqueId() + ".prefers-flight", prefersFlight);
             }
@@ -168,7 +174,6 @@ public class Main extends JavaPlugin {
 
         setupInventory(player);
 
-        updatePlayerVisibility(player);
         refreshVisibilityForJoin(player);
         updateScoreboard(player);
 
@@ -292,15 +297,22 @@ public class Main extends JavaPlugin {
         }
     }
 
-    /** Re-applies every online viewer's visibility preference toward {@code target}. */
+    /**
+     * Single-pass join visibility sync: applies the joining player's own preference toward
+     * everyone, and every existing player's preference toward the joining player.
+     */
     public void refreshVisibilityForJoin(Player target) {
         String vipPerm = getConfig().getString("visibility.vip-permission", "lobby.visibility.vip");
         String staffPerm = getConfig().getString("visibility.staff-permission", "lobby.visibility.staff");
+        String targetVisibility = visibilityManager.getPlayerVisibility(target.getUniqueId());
 
         for (Player viewer : Bukkit.getOnlinePlayers()) {
             if (viewer.equals(target)) continue;
-            String visibility = visibilityManager.getPlayerVisibility(viewer.getUniqueId());
-            applyVisibility(viewer, target, visibility, vipPerm, staffPerm);
+            // Apply joining player's preference toward this viewer
+            applyVisibility(target, viewer, targetVisibility, vipPerm, staffPerm);
+            // Apply this viewer's preference toward the joining player
+            String viewerVisibility = visibilityManager.getPlayerVisibility(viewer.getUniqueId());
+            applyVisibility(viewer, target, viewerVisibility, vipPerm, staffPerm);
         }
     }
 
@@ -402,7 +414,8 @@ public class Main extends JavaPlugin {
         objective.setDisplayName("§c§lexample.invalid");
 
         // Clear all old scores to prevent duplicates and remove old lines.
-        for (String entry : board.getEntries()) {
+        // Copy the set first — resetScores mutates the backing collection in 1.8.8.
+        for (String entry : new ArrayList<>(board.getEntries())) {
             board.resetScores(entry);
         }
 
@@ -566,7 +579,7 @@ public class Main extends JavaPlugin {
             return me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, placeholder);
         }
 
-        // Fallback-Werte wenn PlaceholderAPI nicht verfügbar ist
+        // Fallback values when PlaceholderAPI is not available
         switch (placeholder) {
             case "%phoenix_player_playtime_seconds%":
                 return "0";

@@ -73,10 +73,13 @@ public class GetSpeedCookieCommand implements CommandExecutor {
         // Item successfully placed — now record the cooldown.
         long now = System.currentTimeMillis();
         cooldowns.put(uuid, now);
-        plugin.getPlayersConfig().set(uuid + ".cookie-cooldown", now);
-        // Save synchronously — YamlConfiguration.save is not thread-safe, so we cannot
-        // call it from an async task while the main thread may still be mutating the config.
-        plugin.savePlayersConfig();
+        org.bukkit.configuration.file.FileConfiguration pc = plugin.getPlayersConfig();
+        if (pc != null) {
+            pc.set(uuid + ".cookie-cooldown", now);
+            // Save synchronously — YamlConfiguration.save is not thread-safe, so we cannot
+            // call it from an async task while the main thread may still be mutating the config.
+            plugin.savePlayersConfig();
+        }
 
         plugin.getMessages().send(player, "speedcookie.received-menu");
     }
@@ -122,7 +125,8 @@ public class GetSpeedCookieCommand implements CommandExecutor {
         Long last = cooldowns.get(uuid);
         if (last == null) {
             // Fall back to persisted value (survives restarts/reloads)
-            long persisted = plugin.getPlayersConfig().getLong(uuid + ".cookie-cooldown", 0L);
+            org.bukkit.configuration.file.FileConfiguration pc = plugin.getPlayersConfig();
+            long persisted = pc != null ? pc.getLong(uuid + ".cookie-cooldown", 0L) : 0L;
             if (persisted == 0L) return 0;
             long remaining = (persisted + COOLDOWN_MS) - System.currentTimeMillis();
             if (remaining > 0) {

@@ -74,9 +74,7 @@ public class VisibilityManager {
     }
 
     private void scheduleSaveVisibilityConfig() {
-        if (pendingSaveTaskId != -1) {
-            Bukkit.getScheduler().cancelTask(pendingSaveTaskId);
-        }
+        if (pendingSaveTaskId != -1) return;
         pendingSaveTaskId = Bukkit.getScheduler().runTask(plugin, () -> {
             pendingSaveTaskId = -1;
             saveVisibilityConfig();

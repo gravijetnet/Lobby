@@ -25,7 +25,7 @@ public class LobbyBlockManager {
     public LobbyBlockManager(Main plugin) {
         this.plugin = plugin;
         loadLobbyBlocksConfig();
-        removeAllLobbyBlocks();
+        // removeAllLobbyBlocks() is called explicitly from Main.onEnable after worlds are loaded
     }
 
     public void loadLobbyBlocksConfig() {
@@ -184,9 +184,8 @@ public class LobbyBlockManager {
                             && type != Material.REDSTONE_BLOCK && type != Material.EMERALD_BLOCK) {
                         toRemove.add(key);
                     }
-                } else {
-                    toRemove.add(key);
                 }
+                // World not loaded — keep the key so blocks can be cleaned up when it reloads.
             } catch (NumberFormatException e) {
                 toRemove.add(key);
             }

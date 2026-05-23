@@ -24,6 +24,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.scoreboard.ScoreboardManager;
 import org.bukkit.util.Vector;
 import org.bukkit.util.BlockIterator;
 
@@ -45,13 +46,30 @@ public class LobbyListener implements Listener {
     private final Map<UUID, Long> blockDenyCooldowns = new HashMap<>();
     private static final double MAX_PEARL_SPEED = 3.0;
     private static final long BLOCK_DENY_COOLDOWN_MS = 2000L;
+    private int enderButtTaskId = -1;
+    private int heightLimitTaskId = -1;
 
     public LobbyListener(Main plugin, ZoneManager zoneManager, LobbyBlockManager lobbyBlockManager) {
         this.plugin = plugin;
         this.zoneManager = zoneManager;
         this.lobbyBlockManager = lobbyBlockManager;
-        Bukkit.getScheduler().runTaskTimer(plugin, this::tickEnderButt, 1L, 1L);
-        Bukkit.getScheduler().runTaskTimer(plugin, this::tickHeightLimit, 1L, 4L);
+        enderButtTaskId = Bukkit.getScheduler().runTaskTimer(plugin, this::tickEnderButt, 1L, 1L).getTaskId();
+        heightLimitTaskId = Bukkit.getScheduler().runTaskTimer(plugin, this::tickHeightLimit, 1L, 4L).getTaskId();
+    }
+
+    public void stopTasks() {
+        if (enderButtTaskId != -1) {
+            Bukkit.getScheduler().cancelTask(enderButtTaskId);
+            enderButtTaskId = -1;
+        }
+        if (heightLimitTaskId != -1) {
+            Bukkit.getScheduler().cancelTask(heightLimitTaskId);
+            heightLimitTaskId = -1;
+        }
+        for (int[] ids : lobbyBlockTasks.values()) {
+            for (int id : ids) Bukkit.getScheduler().cancelTask(id);
+        }
+        lobbyBlockTasks.clear();
     }
 
     private void tickHeightLimit() {
@@ -105,12 +123,12 @@ public class LobbyListener implements Listener {
                 if (deniedZone != null) {
                     Location safeReturn = (previousLoc != null) ? previousLoc.clone() : null;
                     Location riderLoc = riderCheck.getLocation();
-                    riderCheck.eject();
                     pearl.eject();
                     pearl.remove();
                     it.remove();
                     lastPearlLoc.remove(uuid);
-                    if (safeReturn != null && zoneManager.getDeniedZoneAt(riderCheck, safeReturn) == null) {
+                    if (safeReturn != null && zoneManager.getDeniedZoneAt(riderCheck, safeReturn) == null
+                            && isSafeGround(safeReturn)) {
                         safeReturn.setY(riderLoc.getY());
                         safeReturn.setYaw(riderLoc.getYaw());
                         safeReturn.setPitch(riderLoc.getPitch());
@@ -148,11 +166,8 @@ public class LobbyListener implements Listener {
             }
 
             if (collisionDetected) {
-                // Collision detected, remove the pearl
-                if (player != null && player.isOnline()) {
-                    player.eject();
-                    pearl.eject();
-                }
+                // Eject player from pearl, then remove pearl
+                pearl.eject();
                 pearl.remove();
                 it.remove();
                 lastPearlLoc.remove(uuid);
@@ -163,11 +178,13 @@ public class LobbyListener implements Listener {
             if (player != null && player.isOnline() && pearl.getPassenger() != null) {
                 Vector lookDir = player.getLocation().getDirection();
                 Vector current = pearl.getVelocity();
-                double speed = current.length();
-                if (speed < 0.5) speed = 1.5;
+                double rawSpeed = current.length();
+                double speed = rawSpeed < 0.5 ? 1.5 : rawSpeed;
                 if (speed > MAX_PEARL_SPEED) speed = MAX_PEARL_SPEED;
-                // Blend 60% current direction + 40% look direction for smooth steering
-                Vector blended = current.normalize().multiply(0.6).add(lookDir.multiply(0.4));
+                // Blend 60% current direction + 40% look direction for smooth steering.
+                // Guard rawSpeed (not bumped speed) against near-zero before dividing to avoid NaN.
+                Vector currentDir = rawSpeed > 1e-6 ? current.clone().multiply(1.0 / rawSpeed) : lookDir.clone();
+                Vector blended = currentDir.multiply(0.6).add(lookDir.multiply(0.4));
                 double blendedLen = blended.length();
                 Vector steered = blendedLen > 1e-6 ? blended.multiply(1.0 / blendedLen) : lookDir.clone().normalize();
                 double finalSpeed = Math.min(speed, MAX_PEARL_SPEED);
@@ -175,7 +192,7 @@ public class LobbyListener implements Listener {
             } else {
                 Vector velocity = pearl.getVelocity();
                 double speed = velocity.length();
-                if (speed > MAX_PEARL_SPEED) {
+                if (speed > 1e-6 && speed > MAX_PEARL_SPEED) {
                     pearl.setVelocity(velocity.normalize().multiply(MAX_PEARL_SPEED));
                 }
             }
@@ -204,7 +221,8 @@ public class LobbyListener implements Listener {
         Player player = event.getPlayer();
         ejectAndCancelPearl(player);
         plugin.savePlayerFlightPreference(player);
-        player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
+        ScoreboardManager sbm = Bukkit.getScoreboardManager();
+        if (sbm != null) player.setScoreboard(sbm.getMainScoreboard());
         plugin.clearScoreboardCache(player.getUniqueId());
         blockDenyCooldowns.remove(player.getUniqueId());
         plugin.cleanupPlayerState(player.getUniqueId());
@@ -213,6 +231,7 @@ public class LobbyListener implements Listener {
     @EventHandler
     public void onWorldChange(PlayerChangedWorldEvent event) {
         plugin.setupWorld(event.getPlayer().getWorld());
+        plugin.clearScoreboardCache(event.getPlayer().getUniqueId());
         plugin.restoreFlightState(event.getPlayer());
     }
 
@@ -251,9 +270,12 @@ public class LobbyListener implements Listener {
         event.setCancelled(false);
         scheduleLobbyBlock(placed.getLocation(), item.getType());
 
-        // Keep slot 4 filled with 64 sandstone lobby blocks (only for named lobby block items)
+        // Keep slot 4 filled with 64 sandstone lobby blocks
+        UUID placerUuid = player.getUniqueId();
         Bukkit.getScheduler().runTask(plugin, () -> {
-            ItemStack slot4 = player.getInventory().getItem(4);
+            Player p = Bukkit.getPlayer(placerUuid);
+            if (p == null || !p.isOnline()) return;
+            ItemStack slot4 = p.getInventory().getItem(4);
             boolean isNamedLobbyBlock = false;
             if (slot4 != null && slot4.hasItemMeta()) {
                 ItemMeta slot4Meta = slot4.getItemMeta();
@@ -264,15 +286,16 @@ public class LobbyListener implements Listener {
             if (isNamedLobbyBlock) {
                 slot4.setAmount(64);
             } else {
+                // Slot 4 is empty or holds something other than our named block — always refill
                 ItemStack fresh = new ItemStack(Material.SANDSTONE, 64);
                 ItemMeta meta = fresh.getItemMeta();
                 if (meta != null) {
                     meta.setDisplayName("§cBlocks");
                     fresh.setItemMeta(meta);
                 }
-                player.getInventory().setItem(4, fresh);
+                p.getInventory().setItem(4, fresh);
             }
-            player.updateInventory();
+            p.updateInventory();
         });
     }
 
@@ -402,10 +425,14 @@ public class LobbyListener implements Listener {
     public void onRespawn(PlayerRespawnEvent event) {
         Location spawn = plugin.getSpawnLocation();
         if (spawn != null) event.setRespawnLocation(spawn);
-        Bukkit.getScheduler().runTaskLater(plugin, () -> plugin.setupPlayer(event.getPlayer()), 1L);
+        UUID respawnUuid = event.getPlayer().getUniqueId();
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            Player p = Bukkit.getPlayer(respawnUuid);
+            if (p != null && p.isOnline()) plugin.setupPlayer(p);
+        }, 1L);
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onPlayerMove(PlayerMoveEvent event) {
         if (event.getTo() == null) return;
         Player player = event.getPlayer();
@@ -423,15 +450,17 @@ public class LobbyListener implements Listener {
             return;
         }
 
-        boolean flightFrom = zoneManager.isFlightAllowedAt(from);
-        boolean flightTo = zoneManager.isFlightAllowedAt(to);
+        if (!plugin.isInBuildMode(player)) {
+            boolean flightFrom = zoneManager.isFlightAllowedAt(from);
+            boolean flightTo = zoneManager.isFlightAllowedAt(to);
 
-        if (flightFrom && !flightTo) {
-            player.setAllowFlight(false);
-            player.setFlying(false);
-        } else if (!flightFrom && flightTo) {
-            if (!plugin.isFlightDisabledByUser(player) && player.hasPermission("lobby.fly")) {
-                player.setAllowFlight(true);
+            if (flightFrom && !flightTo) {
+                player.setAllowFlight(false);
+                player.setFlying(false);
+            } else if (!flightFrom && flightTo) {
+                if (!plugin.isFlightDisabledByUser(player) && player.hasPermission("lobby.fly")) {
+                    player.setAllowFlight(true);
+                }
             }
         }
     }
@@ -453,8 +482,13 @@ public class LobbyListener implements Listener {
             enderButtPearls.put(uuid, pearl);
             lastPearlLoc.put(uuid, pearl.getLocation().clone());
             Bukkit.getScheduler().runTask(plugin, () -> {
-                if (!pearl.isDead() && pearl.isValid()) pearl.setPassenger(player);
-                player.updateInventory();
+                Player p = Bukkit.getPlayer(uuid);
+                if (p == null || !p.isOnline()) {
+                    pearl.remove();
+                    return;
+                }
+                if (!pearl.isDead() && pearl.isValid()) pearl.setPassenger(p);
+                p.updateInventory();
             });
         } else if (item.getType() == Material.GOLD_INGOT && nameEquals(item, "§cCoinshop")) {
             Bukkit.getScheduler().runTask(plugin, () -> player.performCommand("coinshop"));
@@ -520,15 +554,18 @@ public class LobbyListener implements Listener {
     }
 
     private void ejectAndCancelPearl(Player player) {
-        if (player.isInsideVehicle()) {
-            org.bukkit.entity.Entity vehicle = player.getVehicle();
-            if (vehicle != null) vehicle.eject();
-        }
         EnderPearl pearl = enderButtPearls.remove(player.getUniqueId());
         lastPearlLoc.remove(player.getUniqueId());
         if (pearl != null && !pearl.isDead()) {
             pearl.eject();
             pearl.remove();
+        } else if (player.isInsideVehicle()) {
+            // Only eject from an untracked pearl vehicle — leave non-pearl vehicles alone
+            org.bukkit.entity.Entity vehicle = player.getVehicle();
+            if (vehicle instanceof EnderPearl) {
+                player.leaveVehicle();
+                vehicle.remove();
+            }
         }
     }
 
@@ -665,6 +702,14 @@ public class LobbyListener implements Listener {
         }
 
         return false;
+    }
+
+    private boolean isSafeGround(Location loc) {
+        if (loc == null || loc.getWorld() == null) return false;
+        Block below = loc.getWorld().getBlockAt(loc.getBlockX(), loc.getBlockY() - 1, loc.getBlockZ());
+        Block at = loc.getWorld().getBlockAt(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
+        Block above = loc.getWorld().getBlockAt(loc.getBlockX(), loc.getBlockY() + 1, loc.getBlockZ());
+        return below.getType().isSolid() && !isSolid(at.getType()) && !isSolid(above.getType());
     }
 
     private boolean isSolid(Material material) {

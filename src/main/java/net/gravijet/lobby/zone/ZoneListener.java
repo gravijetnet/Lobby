@@ -105,23 +105,31 @@ public final class ZoneListener implements Listener {
         double ux = dx / len, uz = dz / len;
 
         for (double dist = 1.5; dist <= 10.0; dist += 0.5) {
-            Location candidate = new Location(
-                from.getWorld(),
-                boundary.getX() + ux * dist,
-                from.getY(),
-                boundary.getZ() + uz * dist,
-                from.getYaw(), from.getPitch()
-            );
-            if (zoneManager.getDeniedZoneAt(player, candidate) != null) continue;
-            // Validate that there is solid ground below and passable space at/above
-            org.bukkit.block.Block below = candidate.getWorld().getBlockAt(
-                candidate.getBlockX(), candidate.getBlockY() - 1, candidate.getBlockZ());
-            org.bukkit.block.Block at = candidate.getWorld().getBlockAt(
-                candidate.getBlockX(), candidate.getBlockY(), candidate.getBlockZ());
-            org.bukkit.block.Block above = candidate.getWorld().getBlockAt(
-                candidate.getBlockX(), candidate.getBlockY() + 1, candidate.getBlockZ());
+            double cx2 = boundary.getX() + ux * dist;
+            double cz2 = boundary.getZ() + uz * dist;
+            // Scan downward from the player's Y to find actual solid ground at this XZ
+            Location grounded = findGroundAt(from.getWorld(), cx2, from.getY(), cz2, from.getYaw(), from.getPitch());
+            if (grounded == null) continue;
+            if (zoneManager.getDeniedZoneAt(player, grounded) != null) continue;
+            return grounded;
+        }
+        return null;
+    }
+
+    private Location findGroundAt(org.bukkit.World world, double x, double startY, double z, float yaw, float pitch) {
+        if (world == null) return null;
+        int bx = (int) Math.floor(x);
+        int bz = (int) Math.floor(z);
+        int scanY = (int) Math.floor(startY);
+        // Scan up to 8 blocks down from the player's Y to find solid ground
+        for (int dy = 0; dy <= 8; dy++) {
+            int checkY = scanY - dy;
+            if (checkY < 0) break;
+            org.bukkit.block.Block below = world.getBlockAt(bx, checkY - 1, bz);
+            org.bukkit.block.Block at = world.getBlockAt(bx, checkY, bz);
+            org.bukkit.block.Block above = world.getBlockAt(bx, checkY + 1, bz);
             if (below.getType().isSolid() && !at.getType().isSolid() && !above.getType().isSolid()) {
-                return candidate;
+                return new Location(world, x, checkY, z, yaw, pitch);
             }
         }
         return null;
@@ -220,8 +228,10 @@ public final class ZoneListener implements Listener {
         final UUID uuid = player.getUniqueId();
 
         if (alreadyInside) {
-            // Player is already inside — apply knockback to push them out
-            Location boundary = ZoneManager.findNearestBoundaryPoint(from, denied);
+            // Player is already inside — apply knockback to push them out.
+            // Use the zone they're actually in (deniedFrom) for the boundary calculation,
+            // not the target zone (denied), which may be a different overlapping zone.
+            Location boundary = ZoneManager.findNearestBoundaryPoint(from, deniedFrom);
             double depth = 0;
             if (boundary != null) {
                 double dx = from.getX() - boundary.getX();
@@ -229,7 +239,7 @@ public final class ZoneListener implements Listener {
                 depth = Math.sqrt(dx * dx + dz * dz);
             }
             final double strength = Math.max(0.45, Math.min(0.45 + depth * 0.4, 1.2));
-            final Zone finalDenied = denied;
+            final Zone finalDenied = deniedFrom;
             Bukkit.getScheduler().runTask(plugin, () -> {
                 Player p = Bukkit.getPlayer(uuid);
                 if (p == null || !p.isOnline()) return;
@@ -329,13 +339,20 @@ public final class ZoneListener implements Listener {
             for (double a : angles) {
                 double rad = Math.toRadians(a);
                 Location candidate = loc.clone().add(Math.cos(rad) * r, 0, Math.sin(rad) * r);
-                // Use getDeniedZoneAt so we only accept locations this player is allowed to stand in.
-                if (zoneManager.getDeniedZoneAt(player, candidate) == null) {
-                    return candidate;
-                }
+                if (zoneManager.getDeniedZoneAt(player, candidate) != null) continue;
+                if (!hasSolidGround(candidate)) continue;
+                return candidate;
             }
         }
         return null;
+    }
+
+    private boolean hasSolidGround(Location loc) {
+        if (loc == null || loc.getWorld() == null) return false;
+        org.bukkit.block.Block below = loc.getWorld().getBlockAt(loc.getBlockX(), loc.getBlockY() - 1, loc.getBlockZ());
+        org.bukkit.block.Block at = loc.getWorld().getBlockAt(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
+        org.bukkit.block.Block above = loc.getWorld().getBlockAt(loc.getBlockX(), loc.getBlockY() + 1, loc.getBlockZ());
+        return below.getType().isSolid() && !at.getType().isSolid() && !above.getType().isSolid();
     }
 
     private void sendDenyMessage(Player player, Zone zone) {
