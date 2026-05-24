@@ -538,15 +538,16 @@ public class LobbyListener implements Listener {
             // so phase 2 still cleans up the key even if it doesn't set AIR.
         }, firstChangeTicks).getTaskId();
 
-        // Phase 2 – color block → air (always remove from tracking regardless of current type)
+        // Phase 2 – remove block if it is still any lobby-block material, then stop tracking.
         int t2 = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             lobbyBlockTasks.remove(key);
             lobbyBlockManager.removeLobbyBlock(loc);
-            if (loc.getBlock().getType() == colorBlock) {
+            Material current = loc.getBlock().getType();
+            if (current == colorBlock || current == itemType
+                    || current == Material.DIAMOND_BLOCK || current == Material.SANDSTONE
+                    || current == Material.REDSTONE_BLOCK || current == Material.EMERALD_BLOCK) {
                 loc.getBlock().setType(Material.AIR);
             }
-            // If the block was already replaced by something else, just stop tracking it —
-            // the foreign block is left intact.
         }, removeTicks).getTaskId();
 
         lobbyBlockTasks.put(key, new int[]{t1, t2});

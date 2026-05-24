@@ -96,7 +96,9 @@ public class LobbyBlockManager {
     public void addLobbyBlock(Location location) {
         if (location.getWorld() == null) return;
         lobbyBlockKeys.add(toKey(location));
-        scheduleSave();
+        // Save synchronously so the key survives a server kill between placement and removal.
+        lobbyBlocksConfig.set("blocks", new ArrayList<>(lobbyBlockKeys));
+        saveLobbyBlocksConfig();
     }
 
     public void removeLobbyBlock(Location location) {
