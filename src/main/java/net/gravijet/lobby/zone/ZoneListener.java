@@ -301,23 +301,29 @@ public final class ZoneListener implements Listener {
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        Player player = event.getPlayer();
-        Zone denied = zoneManager.getDeniedZoneAt(player, player.getLocation());
-        if (denied == null) return;
+        // Defer by 2 ticks so this runs after LobbyListener.setupPlayer's 1-tick-delayed
+        // spawn teleport; otherwise setupPlayer would overwrite our zone-eject destination.
+        final UUID uuid = event.getPlayer().getUniqueId();
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player == null || !player.isOnline()) return;
+            Zone denied = zoneManager.getDeniedZoneAt(player, player.getLocation());
+            if (denied == null) return;
 
-        Location spawn = plugin.getSpawnLocation();
-        if (spawn != null && zoneManager.getDeniedZoneAt(player, spawn) == null) {
-            player.teleport(spawn);
-            plugin.getMessages().send(player, "zone.restricted-teleported");
-        } else {
-            Location safe = calcSafePosition(player, player.getLocation(), denied);
-            if (safe != null) {
-                player.teleport(safe);
-                sendDenyMessage(player, denied);
+            Location spawn = plugin.getSpawnLocation();
+            if (spawn != null && zoneManager.getDeniedZoneAt(player, spawn) == null) {
+                player.teleport(spawn);
+                plugin.getMessages().send(player, "zone.restricted-teleported");
             } else {
-                plugin.getMessages().send(player, "zone.restricted-leave");
+                Location safe = calcSafePosition(player, player.getLocation(), denied);
+                if (safe != null) {
+                    player.teleport(safe);
+                    sendDenyMessage(player, denied);
+                } else {
+                    plugin.getMessages().send(player, "zone.restricted-leave");
+                }
             }
-        }
+        }, 2L);
     }
 
     // ── Cleanup ───────────────────────────────────────────────────────────────
@@ -365,7 +371,11 @@ public final class ZoneListener implements Listener {
         if (msg.contains("{permission}")) {
             msg = msg.replace("{permission}", zone.getRequiredPermission());
         }
-        player.sendMessage(msg);
+        // Split on \n so admins can use \n in /zone setmessage to produce multi-line messages.
+        // sendMessage(String) on Spigot 1.8.8 does not handle embedded newlines.
+        for (String line : msg.split("\n", -1)) {
+            player.sendMessage(line);
+        }
     }
 
 }

@@ -207,9 +207,25 @@ public class LobbyBlockManager {
         plugin.getLogger().info("Lobby blocks configuration reloaded!");
     }
 
+    private int cleanupTaskId = -1;
+
     /** Must be called once from Main.onEnable to periodically prune orphaned block keys. */
     public void startCleanupTask() {
+        if (cleanupTaskId != -1) {
+            Bukkit.getScheduler().cancelTask(cleanupTaskId);
+        }
         // Run every 5 minutes (6000 ticks)
-        Bukkit.getScheduler().runTaskTimer(plugin, this::cleanupExpiredBlocks, 6000L, 6000L);
+        cleanupTaskId = Bukkit.getScheduler().runTaskTimer(plugin, this::cleanupExpiredBlocks, 6000L, 6000L).getTaskId();
+    }
+
+    public void stopTasks() {
+        if (cleanupTaskId != -1) {
+            Bukkit.getScheduler().cancelTask(cleanupTaskId);
+            cleanupTaskId = -1;
+        }
+        if (pendingSaveTaskId != -1) {
+            Bukkit.getScheduler().cancelTask(pendingSaveTaskId);
+            pendingSaveTaskId = -1;
+        }
     }
 }

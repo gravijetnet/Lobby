@@ -148,8 +148,9 @@ public class Main extends JavaPlugin {
         savePlayersConfig();
         saveConfig();
 
-        // Remove all lobby blocks on disable
+        // Remove all lobby blocks on disable and cancel background tasks
         if (lobbyBlockManager != null) {
+            lobbyBlockManager.stopTasks();
             lobbyBlockManager.removeAllLobbyBlocks();
         }
     }

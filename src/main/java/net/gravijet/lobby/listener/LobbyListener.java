@@ -187,8 +187,7 @@ public class LobbyListener implements Listener {
                 Vector blended = currentDir.multiply(0.6).add(lookDir.multiply(0.4));
                 double blendedLen = blended.length();
                 Vector steered = blendedLen > 1e-6 ? blended.multiply(1.0 / blendedLen) : lookDir.clone().normalize();
-                double finalSpeed = Math.min(speed, MAX_PEARL_SPEED);
-                pearl.setVelocity(steered.multiply(finalSpeed));
+                pearl.setVelocity(steered.multiply(speed));
             } else {
                 Vector velocity = pearl.getVelocity();
                 double speed = velocity.length();
