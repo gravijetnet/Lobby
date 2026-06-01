@@ -422,7 +422,8 @@ public class Main extends JavaPlugin {
 
         int score = lines.size();
         for (String line : lines) {
-            objective.getScore(line).setScore(score--);
+            String entry = line.length() > 40 ? line.substring(0, 40) : line;
+            objective.getScore(entry).setScore(score--);
         }
 
         scoreboardCache.put(player.getUniqueId(), new ArrayList<>(lines));
